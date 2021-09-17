@@ -92,6 +92,7 @@ impl Processor {
         // let data = locked_fund.try_borrow_mut_data()?;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
+        // Recipient can only withdraw the money that is already streamed. 
         let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
         if now >= escrow.end_time {
             msg!("Stream has been successfully completed");
@@ -128,6 +129,7 @@ impl Processor {
         let locked_fund = next_account_info(account_info_iter)?;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
+        // Amount that recipient should receive.  
         let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
        
         if now >= escrow.end_time {
@@ -145,11 +147,13 @@ impl Processor {
         .checked_sub(escrow.amount)
         .unwrap();
         
+        // Send unstreamed fund to the sender. 
         **source_account_info.try_borrow_mut_lamports()? = source_account_info
         .lamports()
         .checked_add(source_account_amount)
         .unwrap();
 
+        // Send streamed fund to the recipient. 
         **dest_account_info.try_borrow_mut_lamports()? = dest_account_info
         .lamports()
         .checked_add(dest_account_amount)
