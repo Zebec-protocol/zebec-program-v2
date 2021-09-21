@@ -78,7 +78,6 @@ impl Processor {
         escrow.end_time = end_time;
         escrow.paused = 0;
         escrow.withdraw_limit = 0;
-        escrow.withdrawn = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
@@ -195,7 +194,7 @@ impl Processor {
             return Err(ProgramError::InsufficientFunds);
         }
         msg!("{}",amount);
-        if amount > escrow.withdraw_limit {
+        if escrow.paused == 1 && amount > escrow.withdraw_limit {
             msg!("{} is your withdraw limit",escrow.withdraw_limit);
             return Err(ProgramError::InsufficientFunds);
         }
@@ -277,9 +276,11 @@ impl Processor {
     pub fn _process_resume(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let locked_fund = next_account_info(account_info_iter)?;
+        let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        msg!("{:?}",escrow);
         escrow.paused = 0;
-        escrow.start_time =  Clock::get()?.unix_timestamp as u64;
+        escrow.start_time =  now;
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
