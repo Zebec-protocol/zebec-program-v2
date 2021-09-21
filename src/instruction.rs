@@ -1,12 +1,25 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
+    program::{invoke},
+    entrypoint::ProgramResult,
 };
-use crate::{error::TokenError};
+
+use crate::{
+    error::TokenError,
+    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
+
+};
 use std::convert::TryInto;
 
 /// Initialize stream data
 pub struct ProcessInitializeStream{
+    pub start_time: u64,
+    pub end_time: u64,
+    pub amount: u64,
+}
+/// Initialize usdc stream data
+pub struct ProcessUsdcStream{
     pub start_time: u64,
     pub end_time: u64,
     pub amount: u64,
@@ -19,7 +32,8 @@ pub struct Processwithdrawstream{
 pub enum TokenInstruction {
     ProcessInitializeStream(ProcessInitializeStream),
     Processwithdrawstream(Processwithdrawstream),
-    Processcancelstream 
+    Processcancelstream ,
+    ProcessUsdcStream(ProcessUsdcStream)
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -46,6 +60,16 @@ impl TokenInstruction {
             // Cancel stream instruction 
             2 => {
                 Self:: Processcancelstream
+            }
+             // Initialize usdc stream 
+             3 => {
+                let (start_time, rest) = rest.split_at(8);
+                let (end_time, rest) = rest.split_at(8);
+                let (amount, _rest) = rest.split_at(8);
+                let start_time = start_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let end_time = end_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                Self::ProcessUsdcStream (ProcessUsdcStream{start_time,end_time,amount})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
