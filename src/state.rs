@@ -12,6 +12,8 @@ pub struct Escrow{
     pub start_time: u64,
     pub end_time: u64,
     pub paused: u64,
+    pub withdraw_limit: u64,
+    pub withdrawn: u64,
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,

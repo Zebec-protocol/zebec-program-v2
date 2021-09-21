@@ -24,6 +24,8 @@ pub enum TokenError {
     TimeEnd,
     #[error("Stream already cancelled")]
     AlreadyCancel,
+    #[error("Paused stream, streamed amount already withdrawn")]
+    AlreadyWithdrawn
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

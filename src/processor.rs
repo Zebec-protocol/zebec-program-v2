@@ -19,7 +19,7 @@ use std::str::FromStr;
 use solana_program::sysvar::Sysvar;
 use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessUsdcStream},
-    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams,Pause},
+    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
     error::TokenError,
     spl_utils::{spl_token_transfer,spl_initialize}
 };
@@ -77,6 +77,8 @@ impl Processor {
         escrow.start_time = start_time;
         escrow.end_time = end_time;
         escrow.paused = 0;
+        escrow.withdraw_limit = 0;
+        escrow.withdrawn = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
@@ -155,9 +157,9 @@ impl Processor {
         .unwrap();
 
         let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
-        let mut pause = Pause::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
+        escrow.paused = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
@@ -165,8 +167,6 @@ impl Processor {
         // escrow.paused = false; 
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
-        pause.paused = true; 
-        pause.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to withdraw from a stream
@@ -190,15 +190,15 @@ impl Processor {
         if *dest_account_info.key != escrow.recipient {
             return Err(TokenError::EscrowMismatch.into());
         }
-        if escrow.paused != 0 {
-            return Err(TokenError::EscrowMismatch.into());
-        }
         if amount>allowed_amt {
             msg!("{} is not yet streamlined.",amount);
             return Err(ProgramError::InsufficientFunds);
         }
         msg!("{}",amount);
-
+        if amount > escrow.withdraw_limit {
+            msg!("{} is your withdraw limit",escrow.withdraw_limit);
+            return Err(ProgramError::InsufficientFunds);
+        }
         **locked_fund.try_borrow_mut_lamports()? = locked_fund
         .lamports()
         .checked_sub(amount)
@@ -208,9 +208,13 @@ impl Processor {
         .lamports()
         .checked_add(amount)
         .unwrap();
-
+        if escrow.paused == 1{
+            msg!("{}{}",escrow.withdraw_limit,amount);
+            escrow.withdraw_limit = escrow.withdraw_limit-amount
+        }
         escrow.amount = escrow.amount-amount;
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        msg!("{:?}",escrow);
         Ok(())
     }
      /// Function to cancel a stream
@@ -260,11 +264,13 @@ impl Processor {
         let locked_fund = next_account_info(account_info_iter)?;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
+        let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
         if now >= escrow.end_time {
             msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
         }
         escrow.paused = 1;
+        escrow.withdraw_limit = allowed_amt;
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -330,6 +336,7 @@ impl PrintProgramError for TokenError {
             TokenError::EscrowMismatch => msg!("Error: Account not associated with this Escrow"),
             TokenError::InvalidInstruction => msg!("Error: Invalid instruction"),
             TokenError::AlreadyCancel => msg!("Error: Invalid instruction"),
+            TokenError::AlreadyWithdrawn => msg!("Error: Paused stream, streamed amount already withdrawn"),
         }
     }
 }
