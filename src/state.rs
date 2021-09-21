@@ -6,14 +6,22 @@ use solana_program::{
 };
 
 /// Initializeing stream states
-#[derive(BorshSerialize, BorshDeserialize, Debug)]
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct Escrow{
     pub start_time: u64,
     pub end_time: u64,
+    pub paused: u64,
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub escrow: Pubkey,
+}
+/// Mint data.
+#[repr(C)]
+#[derive(BorshSerialize,BorshDeserialize,Clone, Copy, Debug, Default, PartialEq)]
+pub struct Pause {
+    pub paused: bool
 }
 pub struct TokenInitializeAccountParams<'a> {
     pub account: AccountInfo<'a>,

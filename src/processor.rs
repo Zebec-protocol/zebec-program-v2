@@ -19,7 +19,7 @@ use std::str::FromStr;
 use solana_program::sysvar::Sysvar;
 use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessUsdcStream},
-    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
+    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams,Pause},
     error::TokenError,
     spl_utils::{spl_token_transfer,spl_initialize}
 };
@@ -50,7 +50,7 @@ impl Processor {
             source_account_info.key,
             lock_account_info.key,
             amount + rent.minimum_balance(std::mem::size_of::<Escrow>()),
-            space_size as u64,
+            space_size,
             program_id,
         );
         invoke(
@@ -76,12 +76,16 @@ impl Processor {
         let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
+        escrow.paused = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.escrow = *lock_account_info.key;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+        // let mut pause = Pause::try_from_slice(&lock_account_info.data.borrow())?;
+        // pause.paused = true;
+        // pause.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
     pub fn _process_usdc_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
@@ -151,14 +155,18 @@ impl Processor {
         .unwrap();
 
         let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
+        let mut pause = Pause::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.escrow = *lock_account_info.key;
+        // escrow.paused = false; 
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+        pause.paused = true; 
+        pause.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to withdraw from a stream
@@ -180,6 +188,9 @@ impl Processor {
         // let rent = &Rent::from_account_info(dest_account_info)?;
         msg!("{} allowed_amt",allowed_amt);
         if *dest_account_info.key != escrow.recipient {
+            return Err(TokenError::EscrowMismatch.into());
+        }
+        if escrow.paused != 0 {
             return Err(TokenError::EscrowMismatch.into());
         }
         if amount>allowed_amt {
@@ -243,6 +254,29 @@ impl Processor {
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
+    //Function to pause a stream
+    pub fn _process_pause(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let locked_fund = next_account_info(account_info_iter)?;
+        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        let now = Clock::get()?.unix_timestamp as u64;
+        if now >= escrow.end_time {
+            msg!("End time is already passed");
+            return Err(TokenError::TimeEnd.into());
+        }
+        escrow.paused = 1;
+        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    pub fn _process_resume(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let locked_fund = next_account_info(account_info_iter)?;
+        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        escrow.paused = 0;
+        escrow.start_time =  Clock::get()?.unix_timestamp as u64;
+        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        Ok(())
+    }
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
@@ -272,6 +306,14 @@ impl Processor {
             }) => {
                 msg!("Instruction: Initializing USDC stream V1.0");
                 Self::_process_usdc_stream(program_id,accounts,start_time, end_time, amount)
+            }
+            TokenInstruction::ProcessPauseStream => {
+                msg!("Instruction: Pausing stream");
+                Self::_process_pause(accounts)
+            }
+            TokenInstruction::ProcessResumeStream=> {
+                msg!("Instruction: Resuming stream");
+                Self::_process_resume(accounts)
             }
         }
     }

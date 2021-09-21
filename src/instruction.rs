@@ -33,7 +33,9 @@ pub enum TokenInstruction {
     ProcessInitializeStream(ProcessInitializeStream),
     Processwithdrawstream(Processwithdrawstream),
     Processcancelstream ,
-    ProcessUsdcStream(ProcessUsdcStream)
+    ProcessUsdcStream(ProcessUsdcStream),
+    ProcessPauseStream,
+    ProcessResumeStream
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -70,6 +72,12 @@ impl TokenInstruction {
                 let end_time = end_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
                 let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
                 Self::ProcessUsdcStream (ProcessUsdcStream{start_time,end_time,amount})
+            }
+            4 =>{
+                Self::ProcessPauseStream
+            }
+            5 =>{
+                Self::ProcessResumeStream
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
