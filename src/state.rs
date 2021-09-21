@@ -17,12 +17,7 @@ pub struct Escrow{
     pub recipient: Pubkey,
     pub escrow: Pubkey,
 }
-/// Mint data.
-#[repr(C)]
-#[derive(BorshSerialize,BorshDeserialize,Clone, Copy, Debug, Default, PartialEq)]
-pub struct Pause {
-    pub paused: bool
-}
+
 pub struct TokenInitializeAccountParams<'a> {
     pub account: AccountInfo<'a>,
     pub mint: AccountInfo<'a>,
