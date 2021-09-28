@@ -89,6 +89,7 @@ impl Processor {
         // pause.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
+    //Ongoing development function
     pub fn _process_usdc_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?; 
@@ -219,7 +220,9 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64;
         // Amount that recipient should receive.  
         let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
-       
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         if now >= escrow.end_time {
             msg!("Stream already completed");
             return Err(TokenError::TimeEnd.into());
