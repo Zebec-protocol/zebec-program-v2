@@ -10,28 +10,26 @@ use {
         initialize_account
     },
 };
-pub fn spl_initialize<'a>(
-    token_program: &AccountInfo<'a>,
-    new_account: &AccountInfo<'a>,
-    mint: &AccountInfo<'a>,
-    authority: &AccountInfo<'a>,
-    rent: &AccountInfo<'a>,
-) -> ProgramResult {
-    let ix = initialize_account(token_program.key, new_account.key, mint.key, authority.key)?;
-    msg!("token Program:{:?}, new_account:{:?}, {:?}, {:?},{:?}",token_program,new_account,mint,authority,rent);
-    invoke(
-        &ix,
-        &[
-            new_account.clone(),
-            mint.clone(),
-            authority.clone(),
-            rent.clone(),
-            token_program.clone(),
-        ],
+use crate::{
+    state::TokenInitializeAccountParams,
+    error::TokenError
+};
+pub fn spl_token_init_account(params: TokenInitializeAccountParams<'_>) -> ProgramResult {
+    let TokenInitializeAccountParams {
+        account,
+        mint,
+        owner,
+        rent,
+        token_program,
+    } = params;
+    let ix = spl_token::instruction::initialize_account(
+        token_program.key,
+        account.key,
+        mint.key,
+        owner.key,
     )?;
-
-    // msg!("token Program:{:?}, new_account:{:?}, {:?}, {:?},{:?}",token_program,new_account,mint,authority,rent);
-    Ok(())
+    let result = invoke(&ix, &[account, mint, owner, rent, token_program]);
+    result.map_err(|_| TokenError::TimeEnd.into())
 }
 pub fn spl_token_transfer<'a>(
     token_program: &AccountInfo<'a>,

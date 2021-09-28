@@ -21,7 +21,7 @@ use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessUsdcStream},
     state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
     error::TokenError,
-    spl_utils::{spl_token_transfer,spl_initialize}
+    spl_utils::{spl_token_transfer,spl_token_init_account}
 };
 /// Program state handler.
 pub struct Processor {}
@@ -36,7 +36,7 @@ impl Processor {
         let space_size = std::mem::size_of::<Escrow>() as u64;
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
-        // Since we are performing system_instruction source account must be signer
+        // Since we are performing system_instruction source account must be signer.
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -127,14 +127,13 @@ impl Processor {
                 lock_account_info.clone(),
                 system_program.clone(),
             ])?;
-            
-        spl_initialize(
-            program_info,
-            lock_account_info,
-            source_account_info,
-            stream_info,
-            rent_info,
-        )?;
+            spl_token_init_account(TokenInitializeAccountParams {
+                account: dest_account_info.clone(),
+                mint: source_account_info.clone(),
+                owner: lock_account_info.clone(),
+                rent: rent_info.clone(),
+                token_program: token_program_info.clone(),
+            })?;
         // spl_token_transfer(
         //     token_program_info,
         //     source_account_info,
@@ -145,25 +144,16 @@ impl Processor {
         // Sending transaction fee to destination account, to call withdraw instruction. 
         let fees = Fees::get()?;
         msg!("Total Payment: {}",amount + rent.minimum_balance(std::mem::size_of::<Escrow>()));
-        msg!("Total Fees Required: {}",fees.fee_calculator.lamports_per_signature * 2);
-        **lock_account_info.lamports.borrow_mut() = lock_account_info
-        .lamports()
-        .checked_sub(fees.fee_calculator.lamports_per_signature * 2)
-        .unwrap();
-        **dest_account_info.lamports.borrow_mut() = dest_account_info
-        .lamports()
-        .checked_add(fees.fee_calculator.lamports_per_signature * 2)
-        .unwrap();
 
         let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
         escrow.paused = 0;
+        escrow.withdraw_limit = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.escrow = *lock_account_info.key;
-        // escrow.paused = false; 
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
@@ -260,6 +250,7 @@ impl Processor {
     //Function to pause a stream
     pub fn _process_pause(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
         let locked_fund = next_account_info(account_info_iter)?;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
@@ -267,6 +258,12 @@ impl Processor {
         if now >= escrow.end_time {
             msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
+        }
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::EscrowMismatch.into());
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
