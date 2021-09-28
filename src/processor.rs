@@ -29,10 +29,10 @@ impl Processor {
     /// Function to initilize a stream
     pub fn _process_initialize_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let source_account_info = next_account_info(account_info_iter)?; 
-        let dest_account_info = next_account_info(account_info_iter)?;
-        let lock_account_info = next_account_info(account_info_iter)?;
-        let system_program = next_account_info(account_info_iter)?;
+        let source_account_info = next_account_info(account_info_iter)?;  //sender
+        let dest_account_info = next_account_info(account_info_iter)?; // recipient
+        let lock_account_info = next_account_info(account_info_iter)?; // program derived address
+        let system_program = next_account_info(account_info_iter)?; // system program
         let space_size = std::mem::size_of::<Escrow>() as u64;
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
@@ -176,6 +176,9 @@ impl Processor {
         }
         // let rent = &Rent::from_account_info(dest_account_info)?;
         msg!("{} allowed_amt",allowed_amt);
+        if !dest_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         if *dest_account_info.key != escrow.recipient {
             return Err(TokenError::EscrowMismatch.into());
         }
@@ -272,10 +275,16 @@ impl Processor {
     }
     pub fn _process_resume(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
         let locked_fund = next_account_info(account_info_iter)?;
         let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
-        msg!("{:?}",escrow);
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::EscrowMismatch.into());
+        }
         escrow.paused = 0;
         escrow.start_time =  now;
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
