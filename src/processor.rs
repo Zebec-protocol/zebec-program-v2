@@ -111,19 +111,15 @@ impl Processor {
     //Ongoing development function
     pub fn _process_usdc_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let source_account_info = next_account_info(account_info_iter)?; 
-        let dest_account_info = next_account_info(account_info_iter)?;
-        let lock_account_info = next_account_info(account_info_iter)?;
-        let master_token_program_info = next_account_info(account_info_iter)?;
-        let system_program = next_account_info(account_info_iter)?;
-        let token_program_info = next_account_info(account_info_iter)?;
-        let stream_info = next_account_info(account_info_iter)?;
-        let rent_info = next_account_info(account_info_iter)?;
-        let mint_info = next_account_info(account_info_iter)?;
-        let associated_token_address = next_account_info(account_info_iter)?;
-        let master_associated_token_address = next_account_info(account_info_iter)?;
-
-        let space_size = std::mem::size_of::<Escrow>() as u64;
+        let source_account_info = next_account_info(account_info_iter)?;  // sender 
+        let dest_account_info = next_account_info(account_info_iter)?; // recipient
+        let lock_account_info = next_account_info(account_info_iter)?; // pda
+        let master_token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let system_program = next_account_info(account_info_iter)?; // system address
+        let token_program_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
+        let stream_info = next_account_info(account_info_iter)?; // our program information 
+        let rent_info = next_account_info(account_info_iter)?; // rent address
+        let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
 
@@ -138,8 +134,7 @@ impl Processor {
             msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
-        // // msg!("dest_account_info:{},token_program_info:{},lock_account_info:{},associated_token_address:{}",dest_account_info.key,token_program_info.key,lock_account_info.key,associated_token_address.key);
-        // msg!("{}",std::mem::size_of::<Escrow>()+29);
+        let space_size = std::mem::size_of::<Escrow>() as u64;
         invoke(
             &system_instruction::transfer(source_account_info.key, lock_account_info.key, rent.minimum_balance(165),), // SPL token space should be 165
             &[
@@ -174,18 +169,18 @@ impl Processor {
         let sender_associated_token_address = get_associated_token_address(&source_account_info.key,&token_program_info.key);
         invoke(
             &spl_token::instruction::transfer(
-                token_program_info.key,
-                &sender_associated_token_address,
+                master_token_program_info.key,
+                associated_token_address.key,
                 lock_account_info.key,
                 source_account_info.key,
-                &[],
+                &[source_account_info.key],
                 amount
             )?,
             &[
-                source_account_info.clone(),
+                master_token_program_info.clone(),
+                associated_token_address.clone(),
                 lock_account_info.clone(),
                 source_account_info.clone(),
-                token_program_info.clone(),
             ],
         )?;
         Ok(())
