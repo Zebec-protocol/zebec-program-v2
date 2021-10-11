@@ -5,12 +5,14 @@ use solana_program::{
     program_error::{PrintProgramError,ProgramError},
     decode_error::DecodeError,
     system_instruction::create_account,
+    system_instruction,
+    instruction::{AccountMeta,Instruction},
 };
 use num_traits::FromPrimitive;
 use solana_program::{
     account_info::{next_account_info},
     entrypoint::ProgramResult,
-    program::{invoke},
+    program::{invoke,invoke_signed},
     msg,
     pubkey::Pubkey,
     sysvar::{rent::Rent,fees::Fees,clock::Clock},
@@ -21,8 +23,24 @@ use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessUsdcStream},
     state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
     error::TokenError,
-    spl_utils::{spl_token_transfer,spl_token_init_account}
+    spl_utils::{spl_token_transfer,spl_token_init_account},
 };
+use spl_associated_token_account::{
+    get_associated_token_address
+};
+use std::result::Result;
+use spl_associated_token_account::create_associated_token_account;
+pub enum AssociatedTokenAccountInstruction {
+    /// Creates an associated token account for the given wallet address and token mint
+    ///
+    ///   0. `[writeable,signer]` Funding account (must be a system account)
+    ///   1. `[writeable]` Associated token account address to be created
+    ///   2. `[]` Wallet address for the new associated token account
+    ///   3. `[]` The token mint for the new associated token account
+    ///   4. `[]` System program
+    ///   5. `[]` SPL Token program
+    Create,
+}
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
@@ -42,8 +60,9 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
+        msg!("End_time:{} start_time:{},Amount:{}",end_time,start_time,amount);
         if now > end_time{
-            msg!("End time is already passed");
+            msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
         let create_account_instruction = create_account(
@@ -95,14 +114,19 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?; 
         let dest_account_info = next_account_info(account_info_iter)?;
         let lock_account_info = next_account_info(account_info_iter)?;
-        let token_program_info = next_account_info(account_info_iter)?;
+        let master_token_program_info = next_account_info(account_info_iter)?;
         let system_program = next_account_info(account_info_iter)?;
-        let program_info = next_account_info(account_info_iter)?;
+        let token_program_info = next_account_info(account_info_iter)?;
         let stream_info = next_account_info(account_info_iter)?;
         let rent_info = next_account_info(account_info_iter)?;
+        let mint_info = next_account_info(account_info_iter)?;
+        let associated_token_address = next_account_info(account_info_iter)?;
+        let master_associated_token_address = next_account_info(account_info_iter)?;
+
         let space_size = std::mem::size_of::<Escrow>() as u64;
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
+
 
         // Since we are performing system_instruction source account must be signer
         if !source_account_info.is_signer {
@@ -111,52 +135,59 @@ impl Processor {
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
         if now > end_time{
-            msg!("End time is already passed");
+            msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
-        let create_account_instruction = create_account(
-            source_account_info.key,
-            lock_account_info.key,
-            rent.minimum_balance(std::mem::size_of::<Escrow>()),
-            space_size as u64,
-            program_id,
-        );
+        // // msg!("dest_account_info:{},token_program_info:{},lock_account_info:{},associated_token_address:{}",dest_account_info.key,token_program_info.key,lock_account_info.key,associated_token_address.key);
+        // msg!("{}",std::mem::size_of::<Escrow>()+29);
         invoke(
-            &create_account_instruction,
+            &system_instruction::transfer(source_account_info.key, lock_account_info.key, rent.minimum_balance(165),), // SPL token space should be 165
             &[
                 source_account_info.clone(),
                 lock_account_info.clone(),
                 system_program.clone(),
-            ])?;
-            spl_token_init_account(TokenInitializeAccountParams {
-                account: dest_account_info.clone(),
-                mint: source_account_info.clone(),
-                owner: lock_account_info.clone(),
-                rent: rent_info.clone(),
-                token_program: token_program_info.clone(),
-            })?;
-        // spl_token_transfer(
-        //     token_program_info,
-        //     source_account_info,
-        //     lock_account_info,
-        //     stream_info,
-        //     amount
-        // )?;
-        // Sending transaction fee to destination account, to call withdraw instruction. 
-        let fees = Fees::get()?;
-        msg!("Total Payment: {}",amount + rent.minimum_balance(std::mem::size_of::<Escrow>()));
-
-        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
-        escrow.start_time = start_time;
-        escrow.end_time = end_time;
-        escrow.paused = 0;
-        escrow.withdraw_limit = 0;
-        escrow.sender = *source_account_info.key;
-        escrow.recipient = *dest_account_info.key;
-        escrow.amount = amount;
-        escrow.escrow = *lock_account_info.key;
-        msg!("{:?}",escrow);
-        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+            ],
+        )?;
+        invoke(
+            &system_instruction::allocate(lock_account_info.key, 165 as u64),
+            &[lock_account_info.clone(), system_program.clone()],
+        );
+        invoke(
+            &system_instruction::assign(lock_account_info.key, master_token_program_info.key),
+            &[lock_account_info.clone(), system_program.clone()],
+        );    
+        invoke(
+            &spl_token::instruction::initialize_account(
+                master_token_program_info.key,
+                lock_account_info.key,
+                token_program_info.key,
+                program_id,
+            )?,
+            &[
+                lock_account_info.clone(),
+                token_program_info.clone(),
+                stream_info.clone(),
+                rent_info.clone(),
+                master_token_program_info.clone(),
+            ],
+        );
+        let sender_associated_token_address = get_associated_token_address(&source_account_info.key,&token_program_info.key);
+        invoke(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                &sender_associated_token_address,
+                lock_account_info.key,
+                source_account_info.key,
+                &[],
+                amount
+            )?,
+            &[
+                source_account_info.clone(),
+                lock_account_info.clone(),
+                source_account_info.clone(),
+                token_program_info.clone(),
+            ],
+        )?;
         Ok(())
     }
     /// Function to withdraw from a stream
@@ -293,6 +324,7 @@ impl Processor {
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
+    
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
@@ -320,6 +352,16 @@ impl Processor {
                 end_time,
                 amount,
             }) => {
+                let account_info_iter = &mut accounts.iter();
+                let source_account_info = next_account_info(account_info_iter)?; 
+                let dest_account_info = next_account_info(account_info_iter)?;
+                let lock_account_info = next_account_info(account_info_iter)?;
+                let master_token_program_info = next_account_info(account_info_iter)?;
+                let system_program = next_account_info(account_info_iter)?;
+                let token_program_info = next_account_info(account_info_iter)?;
+                let stream_info = next_account_info(account_info_iter)?;
+                let rent_info = next_account_info(account_info_iter)?;
+                let mint_info = next_account_info(account_info_iter)?;                
                 msg!("Instruction: Initializing USDC stream V1.0");
                 Self::_process_usdc_stream(program_id,accounts,start_time, end_time, amount)
             }

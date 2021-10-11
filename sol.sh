@@ -1,4 +1,3 @@
 cargo build-bpf   
-solana program deploy $(pwd)/target/deploy/TheStream.so
-node index.js init
-node index.js withdraw
+solana program deploy $(pwd)target/deploy/the_stream.so
+node index.js usdc
