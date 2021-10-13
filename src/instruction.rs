@@ -21,8 +21,8 @@ pub struct ProcessInitializeStream{
     pub end_time: u64,
     pub amount: u64,
 }
-/// Initialize usdc stream data
-pub struct ProcessUsdcStream{
+/// Initialize token stream data
+pub struct ProcessTokenStream{
     pub start_time: u64,
     pub end_time: u64,
     pub amount: u64,
@@ -36,7 +36,7 @@ pub enum TokenInstruction {
     ProcessInitializeStream(ProcessInitializeStream),
     Processwithdrawstream(Processwithdrawstream),
     Processcancelstream ,
-    ProcessUsdcStream(ProcessUsdcStream),
+    ProcessTokenStream(ProcessTokenStream),
     ProcessPauseStream,
     ProcessResumeStream
 }
@@ -66,7 +66,7 @@ impl TokenInstruction {
             2 => {
                 Self:: Processcancelstream
             }
-             // Initialize usdc stream 
+             // Initialize Token stream 
              3 => {
                 let (start_time, rest) = rest.split_at(8);
                 let (end_time, rest) = rest.split_at(8);
@@ -74,7 +74,7 @@ impl TokenInstruction {
                 let start_time = start_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
                 let end_time = end_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
                 let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
-                Self::ProcessUsdcStream (ProcessUsdcStream{start_time,end_time,amount})
+                Self::ProcessTokenStream (ProcessTokenStream{start_time,end_time,amount})
             }
             4 =>{
                 Self::ProcessPauseStream
