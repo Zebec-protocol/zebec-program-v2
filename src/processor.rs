@@ -228,7 +228,7 @@ impl Processor {
         invoke(
             &spl_token::instruction::transfer(
                 master_token_program_info.key,
-                &sender_associated_token_address,
+                &associated_token_address.key,
                 dest_account_info.key,
                 associated_token_address.key,
                 &[program_id],
