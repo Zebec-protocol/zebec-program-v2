@@ -20,7 +20,7 @@ use solana_program::{
 use std::str::FromStr;
 use solana_program::sysvar::Sysvar;
 use crate::{
-    instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream},
+    instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream,ProcessTokenWithdrawStream},
     state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
     error::TokenError,
     spl_utils::{spl_token_transfer,spl_token_init_account},
@@ -123,8 +123,9 @@ impl Processor {
         let pda = next_account_info(account_info_iter)?; // Pda to store data
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
-
-
+        if master_token_program_info.key != &spl_token::id() {
+            return Err(ProgramError::IncorrectProgramId);
+        }    
         // Since we are performing system_instruction source account must be signer
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -211,7 +212,7 @@ impl Processor {
         Ok(())
     }
     //OnGoing Development
-    pub fn _process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
+    pub fn _process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
@@ -225,20 +226,22 @@ impl Processor {
         let pda = next_account_info(account_info_iter)?; // Pda to store data
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
+        let escrow = Escrow::try_from_slice(&pda.data.borrow())?;
+        msg!("{:?}",lock_account_info);
         invoke(
             &spl_token::instruction::transfer(
                 master_token_program_info.key,
-                &associated_token_address.key,
-                dest_account_info.key,
-                associated_token_address.key,
+                &lock_account_info.key, // program consists token in lock_account_info address which is associated token address 
+                dest_account_info.key, // recipient associated token address 
+                lock_account_info.key,
                 &[program_id],
                 amount
             )?,
             &[
                 master_token_program_info.clone(),
-                associated_token_address.clone(),
                 lock_account_info.clone(),
-                source_account_info.clone(),
+                dest_account_info.clone(),
+                stream_info.clone(),
             ],
         )?;
         Ok(())
@@ -415,6 +418,12 @@ impl Processor {
             TokenInstruction::ProcessResumeStream=> {
                 msg!("Instruction: Resuming stream");
                 Self::_process_resume(accounts)
+            }
+            TokenInstruction::ProcessTokenWithdrawStream(ProcessTokenWithdrawStream {
+                amount,
+            }) => {
+                msg!("Instruction: Processing Token Withdraw V1.0");
+                Self::_process_token_withdraw(program_id,accounts, amount)
             }
         }
     }

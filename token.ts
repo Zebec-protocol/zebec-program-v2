@@ -22,7 +22,7 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        'AYSDnYTFRsiwi4sM48x5hzz25NqXBTTgqgaZwMFQYv4D')
+        'CwQnKJtXXNTtSMgygMMBWWqFocVUzGTXG68MtSE3Uy8k')
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv');
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58())
