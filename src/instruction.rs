@@ -1,20 +1,12 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
-    program::{invoke},
-    entrypoint::ProgramResult,
-    pubkey::Pubkey,
-    msg,
 };
 use crate::{
     error::TokenError,
-    state::{Escrow,TokenInitializeAccountParams, TokenTransferParams},
 
 };
 use std::convert::TryInto;
-use spl_associated_token_account::{
-    get_associated_token_address
-};
 /// Initialize stream data
 pub struct ProcessInitializeStream{
     pub start_time: u64,
@@ -55,15 +47,15 @@ impl TokenInstruction {
                 let (start_time, rest) = rest.split_at(8);
                 let (end_time, rest) = rest.split_at(8);
                 let (amount, _rest) = rest.split_at(8);
-                let start_time = start_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
-                let end_time = end_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
-                let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let start_time = start_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessInitializeStream (ProcessInitializeStream{start_time,end_time,amount})
             }
             // Withdraw stream instruction 
             1 => {
                 let (amount, _rest) = rest.split_at(8);
-                let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::Processwithdrawstream (Processwithdrawstream{amount})
             }
             // Cancel stream instruction 
@@ -75,9 +67,9 @@ impl TokenInstruction {
                 let (start_time, rest) = rest.split_at(8);
                 let (end_time, rest) = rest.split_at(8);
                 let (amount, _rest) = rest.split_at(8);
-                let start_time = start_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
-                let end_time = end_time.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
-                let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let start_time = start_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessTokenStream (ProcessTokenStream{start_time,end_time,amount})
             }
             4 =>{
@@ -88,10 +80,11 @@ impl TokenInstruction {
             }
             6 =>{
                 let (amount, _rest) = rest.split_at(8);
-                let amount = amount.try_into().ok().map(u64::from_le_bytes).ok_or(InvalidInstruction)?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessTokenWithdrawStream (ProcessTokenWithdrawStream{amount})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }
+    
 }
