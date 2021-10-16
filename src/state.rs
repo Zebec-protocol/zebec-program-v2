@@ -2,7 +2,6 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     pubkey::Pubkey,
-    account_info::AccountInfo
 };
 
 /// Initializeing stream states
@@ -17,21 +16,4 @@ pub struct Escrow{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub escrow: Pubkey,
-}
-
-pub struct TokenInitializeAccountParams<'a> {
-    pub account: AccountInfo<'a>,
-    pub mint: AccountInfo<'a>,
-    pub owner: AccountInfo<'a>,
-    pub rent: AccountInfo<'a>,
-    pub token_program: AccountInfo<'a>,
-}
-
-pub struct TokenTransferParams<'a: 'b, 'b> {
-    pub source: AccountInfo<'a>,
-    pub destination: AccountInfo<'a>,
-    pub amount: u64,
-    pub authority: AccountInfo<'a>,
-    pub authority_signer_seeds: &'b [&'b [u8]],
-    pub token_program: AccountInfo<'a>,
 }
