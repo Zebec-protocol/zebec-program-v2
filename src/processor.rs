@@ -29,7 +29,7 @@ use solana_program::program_pack::Pack;
 pub struct Processor {}
 impl Processor {
     /// Function to initilize a stream
-    pub fn _process_initialize_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
+    pub fn process_initialize_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
@@ -90,7 +90,7 @@ impl Processor {
         Ok(())
     }
     //Function to stream tokens
-    fn _process_token_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
+    fn process_token_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
@@ -193,7 +193,7 @@ impl Processor {
         Ok(())
     }
     //OnGoing Development 
-    fn _process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
+    fn process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
@@ -279,7 +279,7 @@ impl Processor {
         Ok(())
     }
     /// Function to withdraw from a stream
-    fn _process_withdraw_stream(accounts: &[AccountInfo],amount: u64) -> ProgramResult {
+    fn process_withdraw_stream(accounts: &[AccountInfo],amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let dest_account_info = next_account_info(account_info_iter)?;
         let locked_fund = next_account_info(account_info_iter)?;
@@ -330,7 +330,7 @@ impl Processor {
         Ok(())
     }
      /// Function to cancel a stream
-    fn _process_cancel_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_cancel_stream(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
@@ -373,7 +373,7 @@ impl Processor {
         Ok(())
     }
     //Function to pause a stream
-    fn _process_pause(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_pause(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let locked_fund = next_account_info(account_info_iter)?;
@@ -395,7 +395,7 @@ impl Processor {
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn _process_resume(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_resume(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let locked_fund = next_account_info(account_info_iter)?;
@@ -412,7 +412,6 @@ impl Processor {
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
-    
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
@@ -423,17 +422,17 @@ impl Processor {
                 amount,
             }) => {
                 msg!("Instruction: Processing Stream V1.0");
-                Self::_process_initialize_stream(program_id,accounts,start_time, end_time, amount)
+                Self::process_initialize_stream(program_id,accounts,start_time, end_time, amount)
             }
             TokenInstruction::Processwithdrawstream(Processwithdrawstream {
                 amount,
             }) => {
                 msg!("Instruction: Processing Withdraw V1.0");
-                Self::_process_withdraw_stream(accounts, amount)
+                Self::process_withdraw_stream(accounts, amount)
             }
             TokenInstruction::Processcancelstream => {
                 msg!("Instruction: Processing cancel V1.0");
-                Self::_process_cancel_stream(accounts)
+                Self::process_cancel_stream(accounts)
             }
             TokenInstruction::ProcessTokenStream(ProcessTokenStream {
                 start_time,
@@ -441,21 +440,21 @@ impl Processor {
                 amount,
             }) => {
                 msg!("Instruction: Initializing USDC stream V1.0");
-                Self::_process_token_stream(program_id,accounts,start_time, end_time, amount)
+                Self::process_token_stream(program_id,accounts,start_time, end_time, amount)
             }
             TokenInstruction::ProcessPauseStream => {
                 msg!("Instruction: Pausing stream");
-                Self::_process_pause(accounts)
+                Self::process_pause(accounts)
             }
             TokenInstruction::ProcessResumeStream=> {
                 msg!("Instruction: Resuming stream");
-                Self::_process_resume(accounts)
+                Self::process_resume(accounts)
             }
             TokenInstruction::ProcessTokenWithdrawStream(ProcessTokenWithdrawStream {
                 amount,
             }) => {
                 msg!("Instruction: Processing Token Withdraw V1.0");
-                Self::_process_token_withdraw(program_id,accounts, amount)
+                Self::process_token_withdraw(program_id,accounts, amount)
             }
         }
     }
