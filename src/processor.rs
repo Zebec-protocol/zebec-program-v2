@@ -9,7 +9,6 @@ use solana_program::{
     program::{invoke,invoke_signed},
     pubkey::Pubkey,
     sysvar::{rent::Rent,fees::Fees,clock::Clock,Sysvar},
-    program_pack::{IsInitialized},
     msg,
     system_program
 };
