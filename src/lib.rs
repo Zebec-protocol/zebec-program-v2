@@ -2,6 +2,7 @@ pub mod state;
 pub mod processor;
 pub mod instruction;
 pub mod error;
+pub mod spl_utils;
 use crate::{
     processor::Processor,
     error::TokenError
@@ -9,7 +10,7 @@ use crate::{
 use solana_program::{
     account_info::AccountInfo, entrypoint, entrypoint::ProgramResult,
     pubkey::Pubkey,
-    program_error::PrintProgramError
+    program_error::PrintProgramError,
 };
 
 entrypoint!(process_instruction);

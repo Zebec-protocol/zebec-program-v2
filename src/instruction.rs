@@ -20,11 +20,14 @@ pub struct ProcessTokenStream{
     pub amount: u64,
 }
 pub struct Processwithdrawstream{
-    /// Amount of funds locked
+    /// Amount of fund
     pub amount: u64,
 }
 pub struct ProcessTokenWithdrawStream{
-    /// Amount of funds locked
+    /// Amount of fund
+    pub amount: u64,
+}
+pub struct ProcessFundStream{
     pub amount: u64,
 }
 pub enum TokenInstruction {
@@ -34,7 +37,8 @@ pub enum TokenInstruction {
     ProcessTokenStream(ProcessTokenStream),
     ProcessPauseStream,
     ProcessResumeStream,
-    ProcessTokenWithdrawStream(ProcessTokenWithdrawStream)
+    ProcessTokenWithdrawStream(ProcessTokenWithdrawStream),
+    ProcessFundStream(ProcessFundStream)
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -83,8 +87,12 @@ impl TokenInstruction {
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessTokenWithdrawStream (ProcessTokenWithdrawStream{amount})
             }
+            7 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessFundStream (ProcessFundStream{amount})
+            }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }
-    
 }

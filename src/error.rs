@@ -25,7 +25,13 @@ pub enum TokenError {
     #[error("Stream already cancelled")]
     AlreadyCancel,
     #[error("Paused stream, streamed amount already withdrawn")]
-    AlreadyWithdrawn
+    AlreadyWithdrawn,
+    /// Operation overflowed
+    #[error("Operation overflowed")]
+    Overflow,
+    // Publck Key Check error
+    #[error("Public key mismatched")]
+    PublicKeyMismatch,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

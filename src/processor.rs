@@ -1,29 +1,25 @@
 //! Program state processor
 use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
-    account_info::AccountInfo,
+    account_info::{AccountInfo,next_account_info},
     program_error::{PrintProgramError,ProgramError},
     decode_error::DecodeError,
+    entrypoint::ProgramResult,
     system_instruction::create_account,
-    system_instruction,
+    program::{invoke,invoke_signed},
+    pubkey::Pubkey,
+    sysvar::{rent::Rent,fees::Fees,clock::Clock,Sysvar},
+    program_pack::{IsInitialized},
+    msg,
+    system_program
 };
 use num_traits::FromPrimitive;
-use solana_program::{
-    account_info::{next_account_info},
-    entrypoint::ProgramResult,
-    program::{invoke},
-    msg,
-    pubkey::Pubkey,
-    sysvar::{rent::Rent,fees::Fees,clock::Clock},
-};
-use solana_program::sysvar::Sysvar;
 use crate::{
-    instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream,ProcessTokenWithdrawStream},
+    instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream,ProcessTokenWithdrawStream,ProcessFundStream},
     state::{Escrow},
-    error::TokenError,
+    error::TokenError
 };
-use spl_token::state::Account;
-use solana_program::program_pack::Pack;
+use crate::{spl_utils::{get_seeds,initialize_token_account,assert_keys_equal}};
 
 /// Program state handler.
 pub struct Processor {}
@@ -49,6 +45,7 @@ impl Processor {
             msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
+        assert_keys_equal(system_program::id(), *system_program.key)?;
         let create_account_instruction = create_account(
             source_account_info.key,
             lock_account_info.key,
@@ -65,8 +62,6 @@ impl Processor {
             ])?;
         // Sending transaction fee to destination account, to call withdraw instruction. 
         let fees = Fees::get()?;
-        msg!("Total Payment: {}",amount + rent.minimum_balance(std::mem::size_of::<Escrow>()));
-        msg!("Total Fees Required: {}",fees.fee_calculator.lamports_per_signature * 2);
         **lock_account_info.lamports.borrow_mut() = lock_account_info
         .lamports()
         .checked_sub(fees.fee_calculator.lamports_per_signature * 2)
@@ -94,17 +89,16 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let lock_account_info = next_account_info(account_info_iter)?; // assocaited token address for our program id 
-        let master_token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        let lock_account_info = next_account_info(account_info_iter)?; // Program pda
+        let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let system_program = next_account_info(account_info_iter)?; // system address
-        let token_program_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
-        let stream_info = next_account_info(account_info_iter)?; // our program information 
+        let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
         let rent_info = next_account_info(account_info_iter)?; // rent address
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
-        let pda = next_account_info(account_info_iter)?; // Pda to store data
+        let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
-        if master_token_program_info.key != &spl_token::id() {
+        if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
         // Since we are performing system_instruction source account must be signer
@@ -118,68 +112,58 @@ impl Processor {
             return Err(TokenError::TimeEnd.into());
         }
         let space_size = std::mem::size_of::<Escrow>() as u64;
-        invoke(
-            &system_instruction::transfer(source_account_info.key, lock_account_info.key, rent.minimum_balance(165),), // SPL token space should be 165
-            &[
-                source_account_info.clone(),
-                lock_account_info.clone(),
-                system_program.clone(),
-            ],
-        )?;
-        invoke(
-            &system_instruction::allocate(lock_account_info.key, 165 as u64),
-            &[lock_account_info.clone(), system_program.clone()],
-        )?;
-        invoke(
-            &system_instruction::assign(lock_account_info.key, master_token_program_info.key),
-            &[lock_account_info.clone(), system_program.clone()],
-        )?;    
-        let create_account_instruction = create_account(
-            source_account_info.key,
-            pda.key,
-            rent.minimum_balance(std::mem::size_of::<Escrow>()),
-            space_size,
-            program_id,
-        );
-        invoke(
-            &create_account_instruction,
-            &[
-                source_account_info.clone(),
-                pda.clone(),
-                system_program.clone(),
-            ])?;
-        invoke(
-            &spl_token::instruction::initialize_account(
-                master_token_program_info.key,
+
+        let program_pda = &get_seeds(source_account_info.key) as &[&[u8]];
+        let (_account_address, bump_seed) =
+        Pubkey::find_program_address(&[&source_account_info.key.to_bytes()], program_id); //program_pda
+        let mut signers_seeds = program_pda.to_vec();
+        let bump = &[bump_seed];
+        signers_seeds.push(bump);
+        msg!("{:?}",signers_seeds);
+        if lock_account_info.data_is_empty() {
+            // Creating pda to make associated token owner
+            let create_account_instruction = create_account(
+                source_account_info.key,
                 lock_account_info.key,
-                token_program_info.key,
+                amount + rent.minimum_balance(std::mem::size_of::<Escrow>()),
+                space_size,
                 program_id,
-            )?,
-            &[
-                lock_account_info.clone(),
-                token_program_info.clone(),
-                stream_info.clone(),
-                rent_info.clone(),
-                master_token_program_info.clone(),
-            ],
+            );
+            invoke_signed(
+                &create_account_instruction,
+                &[
+                    source_account_info.clone(),
+                    lock_account_info.clone(),
+                    system_program.clone(),
+                ],&[&signers_seeds[..]])?;
+        }
+        initialize_token_account(
+            token_program_info,
+            token_mint_info,
+            source_account_info,
+            pda_associated_info,
+            rent.minimum_balance(165)
+            ,rent_info,system_program,
+            lock_account_info,
+            &signers_seeds[..]
         )?;
         invoke(
             &spl_token::instruction::transfer(
-                master_token_program_info.key,
+                token_program_info.key,
                 associated_token_address.key,
-                lock_account_info.key,
+                pda_associated_info.key,
                 source_account_info.key,
                 &[source_account_info.key],
                 amount
             )?,
             &[
-                master_token_program_info.clone(),
+                token_program_info.clone(),
                 associated_token_address.clone(),
-                lock_account_info.clone(),
+                pda_associated_info.clone(),
                 source_account_info.clone(),
             ],
         )?;
-        let mut escrow = Escrow::try_from_slice(&pda.data.borrow())?;
+        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
         escrow.paused = 0;
@@ -188,94 +172,77 @@ impl Processor {
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.escrow = *lock_account_info.key;
-        msg!("{:?}",escrow);
-        escrow.serialize(&mut &mut pda.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
     //OnGoing Development 
     fn process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
-        let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let lock_account_info = next_account_info(account_info_iter)?; // assocaited token address for our program id 
-        let master_token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-        let system_program = next_account_info(account_info_iter)?; // system address
-        let token_program_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
-        let stream_info = next_account_info(account_info_iter)?; // our program information 
-        let rent_info = next_account_info(account_info_iter)?; // rent address
+        let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
-        let pda = next_account_info(account_info_iter)?; // Pda to store data
-        // Get the rent sysvar via syscall
-        let rent = Rent::get()?; //
-        if master_token_program_info.key != &spl_token::id() {
+        let receiver_associated_info = next_account_info(account_info_iter)?; // Pda to store data
+        let token_sender_info = next_account_info(account_info_iter)?;
+        if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
         // Since we are performing system_instruction source account must be signer
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if master_token_program_info.key != &spl_token::id() {
-            return Err(ProgramError::IncorrectProgramId);
-        }    
-        invoke(
-            &system_instruction::transfer(source_account_info.key, pda.key, rent.minimum_balance(165),), // SPL token space should be 165
-            &[
-                source_account_info.clone(),
-                pda.clone(),
-                system_program.clone(),
-            ],
-        )?;
-        invoke(
-            &system_instruction::allocate(pda.key, 165 as u64),
-            &[pda.clone(), system_program.clone()],
-        )?;
-        invoke(
-            &system_instruction::assign(pda.key, master_token_program_info.key),
-            &[pda.clone(), system_program.clone()],
-        )?;    
-        invoke(
-            &spl_token::instruction::initialize_account(
-                master_token_program_info.key,
-                pda.key,
+        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
+        let now = Clock::get()?.unix_timestamp as u64;
+        msg!("{}",amount);
+        // Recipient can only withdraw the money that is already streamed. 
+        let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        if now >= escrow.end_time {
+            msg!("Stream has been successfully completed");
+            allowed_amt = escrow.amount;
+        }
+        // let rent = &Rent::from_account_info(dest_account_info)?;
+        msg!("{} allowed_amt",allowed_amt);
+        if *source_account_info.key != escrow.recipient {
+            return Err(TokenError::EscrowMismatch.into());
+        }
+        if amount>allowed_amt {
+            msg!("{} is not yet streamlined.",amount);
+            return Err(ProgramError::InsufficientFunds);
+        }
+        msg!("{}",amount);
+        if escrow.paused == 1 && amount > escrow.withdraw_limit {
+            msg!("{} is your withdraw limit",escrow.withdraw_limit);
+            return Err(ProgramError::InsufficientFunds);
+        }
+        let i = &get_seeds(token_sender_info.key) as &[&[u8]];
+        let (account_address, bump_seed) =
+        Pubkey::find_program_address(i, program_id);
+        let mut signers_seeds = i.to_vec();
+        let bump = &[bump_seed];
+        signers_seeds.push(bump);
+        msg!("Signer/Owner: {}", account_address);
+        invoke_signed(
+            &spl_token::instruction::transfer(
                 token_program_info.key,
-                program_id,
+                associated_token_address.key,
+                receiver_associated_info.key,
+                lock_account_info.key,
+                &[lock_account_info.key],
+                amount
             )?,
             &[
-                pda.clone(),
                 token_program_info.clone(),
-                stream_info.clone(),
-                rent_info.clone(),
-                master_token_program_info.clone(),
-            ],
+                associated_token_address.clone(),
+                receiver_associated_info.clone(),
+                lock_account_info.clone(),
+            ],&[&signers_seeds[..]],
         )?;
-        let mut source_account = Account::unpack(&lock_account_info.data.borrow())?;
-        let mut dest_account = Account::unpack(&pda.data.borrow())?;
-        // msg!("{:?}",source_account);
-        // msg!("{:?}",dest_account);
-
-        source_account.amount = source_account
-                        .amount
-                        -amount;
-        dest_account.delegated_amount = dest_account
-        .amount+amount;
-        Account::pack(source_account, &mut lock_account_info.data.borrow_mut())?;
-        Account::pack(dest_account, &mut pda.data.borrow_mut())?;
-        //OnGoing Development
-        // invoke(
-        //     &spl_token::instruction::transfer(
-        //         master_token_program_info.key,
-        //         lock_account_info.key, // from
-        //         pda.key, // to
-        //         stream_info.key, // authority
-        //         &[],
-        //         amount
-        //     )?,
-        //     &[
-        //         lock_account_info.clone(),
-        //         pda.clone(),
-        //         stream_info.clone(),
-        //         master_token_program_info.clone(),
-        //     ])?;
+        if escrow.paused == 1{
+            msg!("{}{}",escrow.withdraw_limit,amount);
+            escrow.withdraw_limit = escrow.withdraw_limit-amount
+        }
+        escrow.amount = escrow.amount-amount;
+        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to withdraw from a stream
@@ -387,7 +354,7 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if *source_account_info.key != escrow.sender {
+        if *source_account_info.key != escrow.sender || *source_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
             return Err(TokenError::EscrowMismatch.into());
         }
         escrow.paused = 1;
@@ -404,11 +371,50 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if *source_account_info.key != escrow.sender {
+        if *source_account_info.key != escrow.sender || *source_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
             return Err(TokenError::EscrowMismatch.into());
         }
         escrow.paused = 0;
         escrow.start_time =  now;
+        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    //OnGoing Development
+    fn process_fund_stream(accounts: &[AccountInfo],amount: u64,) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
+        let locked_fund = next_account_info(account_info_iter)?;
+        let system_program = next_account_info(account_info_iter)?;
+        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        // if *source_account_info.key != escrow.sender {
+        //     return Err(TokenError::EscrowMismatch.into());
+        // }
+
+        invoke(
+            &solana_program::system_instruction::transfer(
+                source_account_info.key,
+                locked_fund.key,
+                amount
+            ),
+            &[
+                source_account_info.clone(),
+                locked_fund.clone(),
+                system_program.clone()
+            ],
+        )?;
+        // **source_account_info.try_borrow_mut_lamports()? = source_account_info
+        // .lamports()
+        // .checked_sub(amount)
+        // .unwrap();
+        
+        // **locked_fund.try_borrow_mut_lamports()? = locked_fund
+        // .lamports()
+        // .checked_add(amount)
+        // .unwrap();
+        escrow.amount = escrow.amount+amount;
         escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -456,6 +462,12 @@ impl Processor {
                 msg!("Instruction: Processing Token Withdraw V1.0");
                 Self::process_token_withdraw(program_id,accounts, amount)
             }
+            TokenInstruction::ProcessFundStream(ProcessFundStream {
+                amount,
+            }) => {
+                msg!("Instruction: Processing Token Withdraw V1.0");
+                Self::process_fund_stream(accounts, amount)
+            }
         }
     }
 }
@@ -472,6 +484,8 @@ impl PrintProgramError for TokenError {
             TokenError::InvalidInstruction => msg!("Error: Invalid instruction"),
             TokenError::AlreadyCancel => msg!("Error: Invalid instruction"),
             TokenError::AlreadyWithdrawn => msg!("Error: Paused stream, streamed amount already withdrawn"),
+            TokenError::Overflow => msg!("Error: Operation overflowed"),
+            TokenError::PublicKeyMismatch => msg!("Error: Public key mismatched"),
         }
     }
 }
