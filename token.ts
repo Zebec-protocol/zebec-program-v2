@@ -33,10 +33,13 @@ async function main() {
 
 async function pda_seed() {
 
-    let address = new PublicKey("CwQnKJtXXNTtSMgygMMBWWqFocVUzGTXG68MtSE3Uy8k"); // sender address
+    let address = new PublicKey("GMRfL9dy7ZRcuymbRFoW5JZVGV3JkBMX1mTcY7fiqrPg"); // sender address
+    console.log(address)
+    let recipient = new PublicKey("BxhBxUrXXxi4M7dcngzStJP1r7PpSr8LKASatKw5DG6w"); // sender address
     let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
     let validProgramAddress = await PublicKey.findProgramAddress([address.toBuffer()], base58publicKey);
-    console.log(`Valid Program Address: `+validProgramAddress);
+    let sender_recipient = await PublicKey.findProgramAddress([address.toBuffer(),recipient.toBuffer()], base58publicKey);
+    console.log(`Master PDA: `+validProgramAddress);
+    console.log(`Storage PDA `+sender_recipient);
 }
-main()
 pda_seed()

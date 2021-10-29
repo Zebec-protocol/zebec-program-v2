@@ -5,12 +5,12 @@ use solana_program::{
     program_error::{PrintProgramError,ProgramError},
     decode_error::DecodeError,
     entrypoint::ProgramResult,
-    system_instruction::create_account,
+    system_instruction::{create_account},
     program::{invoke,invoke_signed},
     pubkey::Pubkey,
     sysvar::{rent::Rent,fees::Fees,clock::Clock,Sysvar},
     msg,
-    system_program
+    system_program,
 };
 use num_traits::FromPrimitive;
 use crate::{
@@ -18,7 +18,15 @@ use crate::{
     state::{Escrow},
     error::TokenError
 };
-use crate::{spl_utils::{get_seeds,initialize_token_account,assert_keys_equal}};
+use crate::{utils::{
+    get_seeds,
+    initialize_token_account,
+    assert_keys_equal,
+    get_account_address_and_bump_seed_internal,
+    create_pda_account,
+    get_master_address_and_bump_seed,
+    create_transfer
+}};
 
 /// Program state handler.
 pub struct Processor {}
@@ -28,11 +36,12 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let lock_account_info = next_account_info(account_info_iter)?; // program derived address
+        let pda = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?; // program derived address
         let system_program = next_account_info(account_info_iter)?; // system program
-        let space_size = std::mem::size_of::<Escrow>() as u64;
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
+
         // Since we are performing system_instruction source account must be signer.
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -44,46 +53,89 @@ impl Processor {
             msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
+
         assert_keys_equal(system_program::id(), *system_program.key)?;
-        let create_account_instruction = create_account(
+
+        //Creating PDA to store fund
+
+        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
-            lock_account_info.key,
-            amount + rent.minimum_balance(std::mem::size_of::<Escrow>()),
-            space_size,
             program_id,
         );
-        invoke(
-            &create_account_instruction,
-            &[
-                source_account_info.clone(),
-                lock_account_info.clone(),
-                system_program.clone(),
-            ])?;
-        // Sending transaction fee to destination account, to call withdraw instruction. 
-        let fees = Fees::get()?;
-        **lock_account_info.lamports.borrow_mut() = lock_account_info
-        .lamports()
-        .checked_sub(fees.fee_calculator.lamports_per_signature * 2)
-        .unwrap();
-        **dest_account_info.lamports.borrow_mut() = dest_account_info
-        .lamports()
-        .checked_add(fees.fee_calculator.lamports_per_signature * 2)
-        .unwrap();
+        let pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        // Sending fund to master PDA
+        let transfer_amount =  amount+rent.minimum_balance(std::mem::size_of::<Escrow>());
 
-        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
-        escrow.start_time = start_time;
-        escrow.end_time = end_time;
-        escrow.paused = 0;
-        escrow.withdraw_limit = 0;
-        escrow.sender = *source_account_info.key;
-        escrow.recipient = *dest_account_info.key;
-        escrow.amount = amount;
-        escrow.escrow = *lock_account_info.key;
-        msg!("{:?}",escrow);
-        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+        create_transfer(
+            source_account_info,
+            pda,
+            system_program,
+            transfer_amount,
+            pda_signer_seeds
+        )?;
+        // Creating PDA to Store Data
+        let (_account_address, data_bump_seed) = get_account_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+
+        let data_pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &dest_account_info.key.to_bytes(),
+            &[data_bump_seed],
+        ];
+        msg!("{}",pda_data.data_is_empty() );
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
+        // Sending transaction fee to recipient. So, he can withdraw the streamed fund
+        let fees = Fees::get()?;
+        create_transfer(
+            pda,
+            dest_account_info,
+            system_program,
+            fees.fee_calculator.lamports_per_signature * 2,
+            pda_signer_seeds
+        )?;
+        if pda_data.lamports() > 0 as u64{
+            let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+            escrow.start_time = escrow.start_time;
+            escrow.end_time = escrow.end_time;
+            escrow.paused = 0;
+            escrow.withdraw_limit = 0;
+            escrow.sender = *source_account_info.key;
+            escrow.recipient = *dest_account_info.key;
+            escrow.amount = amount+escrow.amount;
+            escrow.escrow = *pda_data.key;
+            escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        }
+        else{
+            create_pda_account(
+                source_account_info,
+                transfer_amount,
+                std::mem::size_of::<Escrow>(),
+                program_id,
+                system_program,
+                pda_data,
+                data_pda_signer_seeds
+            )?;
+            let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+            escrow.start_time = start_time;
+            escrow.end_time = end_time;
+            escrow.paused = 0;
+            escrow.withdraw_limit = 0;
+            escrow.sender = *source_account_info.key;
+            escrow.recipient = *dest_account_info.key;
+            escrow.amount = amount;
+            escrow.escrow = *pda_data.key;
+            msg!("{:?}",escrow);
+            escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        }
         Ok(())
     }
-    //Function to stream tokens
+    //Function to stream tokens 
     fn process_token_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
@@ -213,10 +265,10 @@ impl Processor {
             msg!("{} is your withdraw limit",escrow.withdraw_limit);
             return Err(ProgramError::InsufficientFunds);
         }
-        let i = &get_seeds(token_sender_info.key) as &[&[u8]];
+        let seeds = &get_seeds(token_sender_info.key) as &[&[u8]];
         let (account_address, bump_seed) =
-        Pubkey::find_program_address(i, program_id);
-        let mut signers_seeds = i.to_vec();
+        Pubkey::find_program_address(seeds, program_id);
+        let mut signers_seeds = seeds.to_vec();
         let bump = &[bump_seed];
         signers_seeds.push(bump);
         msg!("Signer/Owner: {}", account_address);
@@ -245,14 +297,16 @@ impl Processor {
         Ok(())
     }
     /// Function to withdraw from a stream
-    fn process_withdraw_stream(accounts: &[AccountInfo],amount: u64) -> ProgramResult {
+    fn process_withdraw_stream(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let dest_account_info = next_account_info(account_info_iter)?;
-        let locked_fund = next_account_info(account_info_iter)?;
+        let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
+        let dest_account_info = next_account_info(account_info_iter)?; // stream receiver
+        let pda = next_account_info(account_info_iter)?; // locked fund
+        let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let system_program = next_account_info(account_info_iter)?; // system program id 
         // let data = locked_fund.try_borrow_mut_data()?;
-        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
-        msg!("{}",amount);
 
         // Recipient can only withdraw the money that is already streamed. 
         let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
@@ -260,8 +314,7 @@ impl Processor {
             msg!("Stream has been successfully completed");
             allowed_amt = escrow.amount;
         }
-        // let rent = &Rent::from_account_info(dest_account_info)?;
-        msg!("{} allowed_amt",allowed_amt);
+        msg!("you can withdraw {}",allowed_amt);
         if !dest_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -277,31 +330,48 @@ impl Processor {
             msg!("{} is your withdraw limit",escrow.withdraw_limit);
             return Err(ProgramError::InsufficientFunds);
         }
-        **locked_fund.try_borrow_mut_lamports()? = locked_fund
-        .lamports()
-        .checked_sub(amount)
-        .unwrap();
-        
-        **dest_account_info.try_borrow_mut_lamports()? = dest_account_info
-        .lamports()
-        .checked_add(amount)
-        .unwrap();
+        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+            source_account_info.key,
+            program_id,
+        );
+        let pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        msg!("{}",pda.lamports());
+        create_transfer(
+            pda,
+            dest_account_info,
+            system_program,
+            amount,
+            pda_signer_seeds
+        )?;
         if escrow.paused == 1{
             msg!("{}{}",escrow.withdraw_limit,amount);
             escrow.withdraw_limit = escrow.withdraw_limit-amount
         }
         escrow.amount = escrow.amount-amount;
-        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        if escrow.amount == 0 { // Closing account to send rent to sender 
+            let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
+        }
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         msg!("{:?}",escrow);
         Ok(())
     }
      /// Function to cancel a stream
-    fn process_cancel_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_cancel_stream(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
-        let locked_fund = next_account_info(account_info_iter)?;
-        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        let pda = next_account_info(account_info_iter)?; // locked fund
+        let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let system_program = next_account_info(account_info_iter)?; // system program id 
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        msg!("{:?}",pda);
         let now = Clock::get()?.unix_timestamp as u64;
         // Amount that recipient should receive.  
         let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
@@ -316,26 +386,43 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         let dest_account_amount = escrow.amount-allowed_amt;
+
+        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+            source_account_info.key,
+            program_id,
+        );
+        let pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        // Sending streamed payment to receiver 
+        create_transfer(
+            pda,
+            dest_account_info,
+            system_program,
+            dest_account_amount,
+            pda_signer_seeds
+        )?;
+        // Sending pending streaming payment to sender 
         let source_account_amount = escrow.amount-dest_account_amount;
+        create_transfer(
+            pda,
+            source_account_info,
+            system_program,
+            source_account_amount,
+            pda_signer_seeds
+        )?;
 
-        **locked_fund.try_borrow_mut_lamports()? = locked_fund
-        .lamports()
-        .checked_sub(escrow.amount)
-        .unwrap();
-        
-        // Send unstreamed fund to the sender. 
-        **source_account_info.try_borrow_mut_lamports()? = source_account_info
-        .lamports()
-        .checked_add(source_account_amount)
-        .unwrap();
+        // Sending pda rent to sender account
+        let dest_starting_lamports = source_account_info.lamports();
+        **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+            .checked_add(pda_data.lamports())
+            .ok_or(TokenError::Overflow)?;
 
-        // Send streamed fund to the recipient. 
-        **dest_account_info.try_borrow_mut_lamports()? = dest_account_info
-        .lamports()
-        .checked_add(dest_account_amount)
-        .unwrap();
+        **pda_data.lamports.borrow_mut() = 0;
         escrow.amount = 0;
-        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        // escrow.amount = 0;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
     //Function to pause a stream
@@ -433,11 +520,11 @@ impl Processor {
                 amount,
             }) => {
                 msg!("Instruction: Processing Withdraw V1.0");
-                Self::process_withdraw_stream(accounts, amount)
+                Self::process_withdraw_stream(program_id,accounts, amount)
             }
             TokenInstruction::Processcancelstream => {
                 msg!("Instruction: Processing cancel V1.0");
-                Self::process_cancel_stream(accounts)
+                Self::process_cancel_stream(program_id,accounts)
             }
             TokenInstruction::ProcessTokenStream(ProcessTokenStream {
                 start_time,

@@ -2,7 +2,7 @@ pub mod state;
 pub mod processor;
 pub mod instruction;
 pub mod error;
-pub mod spl_utils;
+pub mod utils;
 use crate::{
     processor::Processor,
     error::TokenError

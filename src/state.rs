@@ -3,6 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use solana_program::{
     pubkey::Pubkey,
 };
+use num_enum::TryFromPrimitive;
 
 /// Initializeing stream states
 #[repr(C)]
