@@ -48,7 +48,6 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        msg!("End_time:{} start_time:{},Amount:{}",end_time,start_time,amount);
         if now > end_time{
             msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
@@ -102,7 +101,7 @@ impl Processor {
         if pda_data.lamports() > 0 as u64{
             let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
             escrow.start_time = escrow.start_time;
-            escrow.end_time = escrow.end_time;
+            escrow.end_time = end_time;
             escrow.paused = 0;
             escrow.withdraw_limit = 0;
             escrow.sender = *source_account_info.key;
@@ -426,82 +425,100 @@ impl Processor {
         Ok(())
     }
     //Function to pause a stream
-    fn process_pause(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_pause(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
-        let locked_fund = next_account_info(account_info_iter)?;
-        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?;
+        let (account_address, _data_bump_seed) = get_account_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+        assert_keys_equal(account_address, *pda_data.key)?;
+
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
         if now >= escrow.end_time {
             msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
         }
-        if !source_account_info.is_signer {
+        if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if *source_account_info.key != escrow.sender || *source_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
+
+        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
             return Err(TokenError::EscrowMismatch.into());
+        }
+        if escrow.paused ==1{
+            return Err(TokenError::AlreadyPaused.into());
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
-        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_resume(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_resume(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
-        let locked_fund = next_account_info(account_info_iter)?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?;
+
+        let (account_address, _data_bump_seed) = get_account_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+        assert_keys_equal(account_address, *pda_data.key)?;
         let now = Clock::get()?.unix_timestamp as u64;
-        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
-        if !source_account_info.is_signer {
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if *source_account_info.key != escrow.sender || *source_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
+        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
             return Err(TokenError::EscrowMismatch.into());
+        }
+        if escrow.paused ==0{
+            return Err(TokenError::AlreadyResumed.into());
         }
         escrow.paused = 0;
         escrow.start_time =  now;
-        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
     //OnGoing Development
-    fn process_fund_stream(accounts: &[AccountInfo],amount: u64,) -> ProgramResult {
+    fn process_fund_stream(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
-        let locked_fund = next_account_info(account_info_iter)?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?;
         let system_program = next_account_info(account_info_iter)?;
-        let mut escrow = Escrow::try_from_slice(&locked_fund.data.borrow())?;
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        // if *source_account_info.key != escrow.sender {
-        //     return Err(TokenError::EscrowMismatch.into());
-        // }
-
+        let (account_address, _data_bump_seed) = get_account_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+        assert_keys_equal(account_address, *pda_data.key)?;
         invoke(
             &solana_program::system_instruction::transfer(
                 source_account_info.key,
-                locked_fund.key,
+                pda.key,
                 amount
             ),
             &[
                 source_account_info.clone(),
-                locked_fund.clone(),
+                pda.clone(),
                 system_program.clone()
             ],
         )?;
-        // **source_account_info.try_borrow_mut_lamports()? = source_account_info
-        // .lamports()
-        // .checked_sub(amount)
-        // .unwrap();
-        
-        // **locked_fund.try_borrow_mut_lamports()? = locked_fund
-        // .lamports()
-        // .checked_add(amount)
-        // .unwrap();
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         escrow.amount = escrow.amount+amount;
-        escrow.serialize(&mut &mut locked_fund.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Processes an [Instruction](enum.Instruction.html).
@@ -536,11 +553,11 @@ impl Processor {
             }
             TokenInstruction::ProcessPauseStream => {
                 msg!("Instruction: Pausing stream");
-                Self::process_pause(accounts)
+                Self::process_pause(program_id,accounts)
             }
             TokenInstruction::ProcessResumeStream=> {
                 msg!("Instruction: Resuming stream");
-                Self::process_resume(accounts)
+                Self::process_resume(program_id,accounts)
             }
             TokenInstruction::ProcessTokenWithdrawStream(ProcessTokenWithdrawStream {
                 amount,
@@ -552,7 +569,7 @@ impl Processor {
                 amount,
             }) => {
                 msg!("Instruction: Processing Token Withdraw V1.0");
-                Self::process_fund_stream(accounts, amount)
+                Self::process_fund_stream(program_id,accounts, amount)
             }
         }
     }
@@ -572,6 +589,8 @@ impl PrintProgramError for TokenError {
             TokenError::AlreadyWithdrawn => msg!("Error: Paused stream, streamed amount already withdrawn"),
             TokenError::Overflow => msg!("Error: Operation overflowed"),
             TokenError::PublicKeyMismatch => msg!("Error: Public key mismatched"),
+            TokenError::AlreadyPaused=> msg!("Error: Transaction is already paused"),
+            TokenError::AlreadyResumed=>msg!("Error: Transaction is not paused")
         }
     }
 }

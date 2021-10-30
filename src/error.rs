@@ -32,6 +32,12 @@ pub enum TokenError {
     // Publck Key Check error
     #[error("Public key mismatched")]
     PublicKeyMismatch,
+    // Already Paused
+    #[error("Transaction is already paused")]
+    AlreadyPaused,
+    // Already Resumed or not paused
+    #[error("Transaction is not paused")]
+    AlreadyResumed
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {
