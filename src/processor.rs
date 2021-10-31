@@ -15,7 +15,7 @@ use solana_program::{
 use num_traits::FromPrimitive;
 use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream,ProcessTokenWithdrawStream,ProcessFundStream},
-    state::{Escrow},
+    state::{Escrow,TokenEscrow},
     error::TokenError
 };
 use crate::{utils::{
@@ -161,7 +161,7 @@ impl Processor {
             msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
-        let space_size = std::mem::size_of::<Escrow>() as u64;
+        let space_size = std::mem::size_of::<TokenEscrow>() as u64;
 
         let program_pda = &get_seeds(source_account_info.key) as &[&[u8]];
         let (_account_address, bump_seed) =
@@ -170,23 +170,21 @@ impl Processor {
         let bump = &[bump_seed];
         signers_seeds.push(bump);
         msg!("{:?}",signers_seeds);
-        if lock_account_info.data_is_empty() {
-            // Creating pda to make associated token owner
-            let create_account_instruction = create_account(
-                source_account_info.key,
-                lock_account_info.key,
-                amount + rent.minimum_balance(std::mem::size_of::<Escrow>()),
-                space_size,
-                program_id,
-            );
-            invoke_signed(
-                &create_account_instruction,
-                &[
-                    source_account_info.clone(),
-                    lock_account_info.clone(),
-                    system_program.clone(),
-                ],&[&signers_seeds[..]])?;
-        }
+        // Creating pda to make associated token owner
+        let create_account_instruction = create_account(
+            source_account_info.key,
+            lock_account_info.key,
+            amount + rent.minimum_balance(std::mem::size_of::<TokenEscrow>()),
+            space_size,
+            program_id,
+        );
+        invoke_signed(
+            &create_account_instruction,
+            &[
+                source_account_info.clone(),
+                lock_account_info.clone(),
+                system_program.clone(),
+            ],&[&signers_seeds[..]])?;
         initialize_token_account(
             token_program_info,
             token_mint_info,
@@ -213,7 +211,7 @@ impl Processor {
                 source_account_info.clone(),
             ],
         )?;
-        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
+        let mut escrow = TokenEscrow::try_from_slice(&lock_account_info.data.borrow())?;
         escrow.start_time = start_time;
         escrow.end_time = end_time;
         escrow.paused = 0;
@@ -241,7 +239,7 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = Escrow::try_from_slice(&lock_account_info.data.borrow())?;
+        let mut escrow = TokenEscrow::try_from_slice(&lock_account_info.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         msg!("{}",amount);
         // Recipient can only withdraw the money that is already streamed. 
