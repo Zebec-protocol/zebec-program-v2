@@ -59,28 +59,6 @@ pub fn initialize_token_account <'a>(
     Ok(())
 }
 
-
-
-/// Returns Realm Token Holding PDA seeds
-pub fn get_seeds<'a>(
-    realm: &'a Pubkey,
-) -> [&'a [u8]; 2] {
-    [
-        PREFIX.as_bytes(),
-        realm.as_ref(),
-        // governing_token_mint.as_ref(),
-    ]
-}
-
-pub fn get_recipient_seeds<'a>(
-    sender: &'a Pubkey,
-    recipient: &'a Pubkey,
-) -> [&'a [u8]; 2] {
-    [
-        sender.as_ref(),
-        recipient.as_ref(),
-    ]
-}
 pub fn get_account_address_and_bump_seed_internal(
     sender: &Pubkey,
     program_id: &Pubkey,
