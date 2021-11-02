@@ -16,16 +16,20 @@ use num_traits::FromPrimitive;
 use crate::{
     instruction::{TokenInstruction,ProcessInitializeStream,Processwithdrawstream,ProcessTokenStream,ProcessTokenWithdrawStream,ProcessFundStream},
     state::{Escrow,TokenEscrow},
-    error::TokenError
+    error::TokenError,
+    PREFIX,
+    PREFIX_ASSOCIATED
 };
 use crate::{utils::{
-    get_seeds,
     initialize_token_account,
     assert_keys_equal,
     get_account_address_and_bump_seed_internal,
     create_pda_account,
     get_master_address_and_bump_seed,
-    create_transfer
+    get_master_token_address_and_bump_seed,
+    get_account_token_address_and_bump_seed_internal,
+    create_transfer,
+    get_account_associated_token_address_and_bump_seed_internal,
 }};
 
 /// Program state handler.
@@ -87,7 +91,6 @@ impl Processor {
             &dest_account_info.key.to_bytes(),
             &[data_bump_seed],
         ];
-        msg!("{}",pda_data.data_is_empty() );
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
         let fees = Fees::get()?;
@@ -139,7 +142,8 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let lock_account_info = next_account_info(account_info_iter)?; // Program pda
+        let pda = next_account_info(account_info_iter)?; // master pda
+        let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let system_program = next_account_info(account_info_iter)?; // system address
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
@@ -163,83 +167,171 @@ impl Processor {
         }
         let space_size = std::mem::size_of::<TokenEscrow>() as u64;
 
-        let program_pda = &get_seeds(source_account_info.key) as &[&[u8]];
-        let (_account_address, bump_seed) =
-        Pubkey::find_program_address(&[&source_account_info.key.to_bytes()], program_id); //program_pda
-        let mut signers_seeds = program_pda.to_vec();
-        let bump = &[bump_seed];
-        signers_seeds.push(bump);
-        msg!("{:?}",signers_seeds);
-        // Creating pda to make associated token owner
-        let create_account_instruction = create_account(
+        let (_account_address, bump_seed) = get_master_token_address_and_bump_seed(
             source_account_info.key,
-            lock_account_info.key,
-            amount + rent.minimum_balance(std::mem::size_of::<TokenEscrow>()),
-            space_size,
             program_id,
         );
-        invoke_signed(
-            &create_account_instruction,
-            &[
-                source_account_info.clone(),
-                lock_account_info.clone(),
-                system_program.clone(),
-            ],&[&signers_seeds[..]])?;
-        initialize_token_account(
-            token_program_info,
-            token_mint_info,
-            source_account_info,
-            pda_associated_info,
-            rent.minimum_balance(165)
-            ,rent_info,system_program,
-            lock_account_info,
-            &signers_seeds[..]
-        )?;
-        invoke(
-            &spl_token::instruction::transfer(
-                token_program_info.key,
-                associated_token_address.key,
-                pda_associated_info.key,
+        let pda_signer_seeds: &[&[_]] = &[
+            PREFIX.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        let (pda_data_address, data_bump_seed) = get_account_token_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+
+        let data_pda_signer_seeds: &[&[_]] = &[
+            PREFIX.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &dest_account_info.key.to_bytes(),
+            &[data_bump_seed],
+        ];
+
+        let (_pda_associated_address, associated_bump_seed) = get_account_associated_token_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+
+        let associated_pda_signer_seeds: &[&[_]] = &[
+            PREFIX_ASSOCIATED.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &dest_account_info.key.to_bytes(),
+            &[associated_bump_seed],
+        ];
+        assert_keys_equal(pda_data_address, *pda_data.key)?;
+        if pda.data_is_empty(){
+            let create_account_instruction = create_account(
                 source_account_info.key,
-                &[source_account_info.key],
-                amount
-            )?,
-            &[
-                token_program_info.clone(),
-                associated_token_address.clone(),
-                pda_associated_info.clone(),
-                source_account_info.clone(),
-            ],
-        )?;
-        let mut escrow = TokenEscrow::try_from_slice(&lock_account_info.data.borrow())?;
-        escrow.start_time = start_time;
-        escrow.end_time = end_time;
-        escrow.paused = 0;
-        escrow.withdraw_limit = 0;
-        escrow.sender = *source_account_info.key;
-        escrow.recipient = *dest_account_info.key;
-        escrow.amount = amount;
-        escrow.escrow = *lock_account_info.key;
-        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+                pda.key,
+                rent.minimum_balance(std::mem::size_of::<TokenEscrow>()),
+                space_size,
+                program_id,
+            );
+            invoke_signed(
+                &create_account_instruction,
+                &[
+                    source_account_info.clone(),
+                    pda.clone(),
+                    system_program.clone(),
+                ],&[&pda_signer_seeds[..]])?;
+        }
+        if pda_data.data_is_empty(){
+            // Creating pda to make associated token owner
+
+            let create_account_instruction = create_account(
+                source_account_info.key,
+                pda_data.key,
+                rent.minimum_balance(std::mem::size_of::<TokenEscrow>()),
+                space_size,
+                program_id,
+            );
+            invoke_signed(
+                &create_account_instruction,
+                &[
+                    source_account_info.clone(),
+                    pda_data.clone(),
+                    system_program.clone(),
+                ],&[&data_pda_signer_seeds[..]])?;
+
+                initialize_token_account(
+                    token_program_info,
+                    token_mint_info,
+                    source_account_info,
+                    pda_associated_info,
+                    rent.minimum_balance(165),
+                    rent_info,
+                    system_program,
+                    pda,
+                    &associated_pda_signer_seeds[..],
+                )?;
+                invoke(
+                    &spl_token::instruction::transfer(
+                        token_program_info.key,
+                        associated_token_address.key,
+                        pda_associated_info.key,
+                        source_account_info.key,
+                        &[source_account_info.key],
+                        amount
+                    )?,
+                    &[
+                        token_program_info.clone(),
+                        associated_token_address.clone(),
+                        pda_associated_info.clone(),
+                        source_account_info.clone(),
+                    ],
+                )?;
+                let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+                escrow.start_time = start_time;
+                escrow.end_time = end_time;
+                escrow.paused = 0;
+                escrow.withdraw_limit = 0;
+                escrow.sender = *source_account_info.key;
+                escrow.recipient = *dest_account_info.key;
+                escrow.amount = amount;
+                escrow.escrow = *pda_data.key;
+                escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        }
+        else {
+            invoke(
+                &spl_token::instruction::transfer(
+                    token_program_info.key,
+                    associated_token_address.key,
+                    pda_associated_info.key,
+                    source_account_info.key,
+                    &[source_account_info.key],
+                    amount
+                )?,
+                &[
+                    token_program_info.clone(),
+                    associated_token_address.clone(),
+                    pda_associated_info.clone(),
+                    source_account_info.clone(),
+                ],
+            )?;
+            let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+            escrow.start_time = escrow.start_time;
+            escrow.end_time = end_time;
+            escrow.paused = 0;
+            escrow.withdraw_limit = 0;
+            escrow.sender = *source_account_info.key;
+            escrow.recipient = *dest_account_info.key;
+            escrow.amount = amount+escrow.amount;
+            escrow.escrow = *pda_data.key;
+            escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        }
         Ok(())
     }
     //OnGoing Development 
     fn process_token_withdraw(program_id: &Pubkey, accounts: &[AccountInfo], amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
-        let lock_account_info = next_account_info(account_info_iter)?; // assocaited token address for our program id 
+        let dest_account_info = next_account_info(account_info_iter)?; // recipient
+        let pda = next_account_info(account_info_iter)?; // master pda
+        let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
-        let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
-        let receiver_associated_info = next_account_info(account_info_iter)?; // Pda to store data
-        let token_sender_info = next_account_info(account_info_iter)?;
+        let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
+        let rent_info = next_account_info(account_info_iter)?; // rent address
+        let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
+        let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
+        let associated_token_info = next_account_info(account_info_iter)?; // Associated token master
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
         // Since we are performing system_instruction source account must be signer
-        if !source_account_info.is_signer {
+        if !dest_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = TokenEscrow::try_from_slice(&lock_account_info.data.borrow())?;
+        let (pda_data_address, _data_bump_seed) = get_account_token_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+        msg!("{}       {}",pda_data.key,pda_data_address);
+        assert_keys_equal(pda_data_address, *pda_data.key)?;
+        let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         msg!("{}",amount);
         // Recipient can only withdraw the money that is already streamed. 
@@ -250,7 +342,7 @@ impl Processor {
         }
         // let rent = &Rent::from_account_info(dest_account_info)?;
         msg!("{} allowed_amt",allowed_amt);
-        if *source_account_info.key != escrow.recipient {
+        if *dest_account_info.key != escrow.recipient {
             return Err(TokenError::EscrowMismatch.into());
         }
         if amount>allowed_amt {
@@ -262,35 +354,60 @@ impl Processor {
             msg!("{} is your withdraw limit",escrow.withdraw_limit);
             return Err(ProgramError::InsufficientFunds);
         }
-        let seeds = &get_seeds(token_sender_info.key) as &[&[u8]];
-        let (account_address, bump_seed) =
-        Pubkey::find_program_address(seeds, program_id);
-        let mut signers_seeds = seeds.to_vec();
-        let bump = &[bump_seed];
-        signers_seeds.push(bump);
-        msg!("Signer/Owner: {}", account_address);
+        let (pda_associated_address, _associated_bump_seed) = get_account_associated_token_address_and_bump_seed_internal(
+            source_account_info.key,
+            program_id,
+            dest_account_info.key
+        );
+        assert_keys_equal(pda_associated_address, *pda_associated_info.key)?;
+        let (_account_address, bump_seed) = get_master_token_address_and_bump_seed(
+            source_account_info.key,
+            program_id,
+        );
+        let pda_signer_seeds: &[&[_]] = &[
+            PREFIX.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        if receiver_associated_info.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    dest_account_info.key,
+                    dest_account_info.key,
+                    token_mint_info.key,
+                ),&[
+                    dest_account_info.clone(),
+                    receiver_associated_info.clone(),
+                    dest_account_info.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone()
+                ]
+            )?
+        }
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
-                associated_token_address.key,
+                pda_associated_info.key,
                 receiver_associated_info.key,
-                lock_account_info.key,
-                &[lock_account_info.key],
+                pda.key,
+                &[pda.key],
                 amount
             )?,
             &[
                 token_program_info.clone(),
-                associated_token_address.clone(),
+                pda_associated_info.clone(),
                 receiver_associated_info.clone(),
-                lock_account_info.clone(),
-            ],&[&signers_seeds[..]],
+                pda.clone(),
+            ],&[&pda_signer_seeds[..]],
         )?;
         if escrow.paused == 1{
             msg!("{}{}",escrow.withdraw_limit,amount);
             escrow.withdraw_limit = escrow.withdraw_limit-amount
         }
         escrow.amount = escrow.amount-amount;
-        escrow.serialize(&mut &mut lock_account_info.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to withdraw from a stream

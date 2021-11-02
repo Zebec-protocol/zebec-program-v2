@@ -24,7 +24,7 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        'GMRfL9dy7ZRcuymbRFoW5JZVGV3JkBMX1mTcY7fiqrPg') // sender/recipient address
+        '9fvHiQXZHVqMftRBCUxrXKLqVKT7kUty2uaobUvnCkPu') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58()) // 
@@ -33,14 +33,35 @@ async function main() {
 
 async function pda_seed() {
 
-    let address = new PublicKey("GMRfL9dy7ZRcuymbRFoW5JZVGV3JkBMX1mTcY7fiqrPg"); // sender address
+    let address = new PublicKey("BjhQP3c6tazpaiNjvbyV9pvPuA1DQQw58USHSfEjdaeU"); // sender address
     console.log(address)
-    let recipient = new PublicKey("BxhBxUrXXxi4M7dcngzStJP1r7PpSr8LKASatKw5DG6w"); // sender address
+    let pda_associated = "pda_associated";
+    let recipient = new PublicKey("9fvHiQXZHVqMftRBCUxrXKLqVKT7kUty2uaobUvnCkPu"); // sender address
     let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
     let validProgramAddress = await PublicKey.findProgramAddress([address.toBuffer()], base58publicKey);
     let sender_recipient = await PublicKey.findProgramAddress([address.toBuffer(),recipient.toBuffer()], base58publicKey);
     console.log(`Master PDA: `+validProgramAddress);
     console.log(`Storage PDA `+sender_recipient);
+
 }
-pda_seed()
+async function pda_seed_token() {
+
+    let address = new PublicKey("BjhQP3c6tazpaiNjvbyV9pvPuA1DQQw58USHSfEjdaeU"); // sender address
+    console.log(address)
+    let recipient = new PublicKey("9fvHiQXZHVqMftRBCUxrXKLqVKT7kUty2uaobUvnCkPu"); // sender address
+    let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
+    let test = "token";
+    let pda_associated = "pda_associated";
+
+    let validProgramAddress = await PublicKey.findProgramAddress([Buffer.from(test, 'utf8'),address.toBuffer()], base58publicKey);
+    let sender_recipient = await PublicKey.findProgramAddress([Buffer.from(test, 'utf8'),address.toBuffer(),recipient.toBuffer()], base58publicKey);
+    let pda_associate = await PublicKey.findProgramAddress([Buffer.from(pda_associated, 'utf8'),address.toBuffer(),recipient.toBuffer()], base58publicKey);
+
+    console.log(`Master PDA: `+validProgramAddress);
+    console.log(`Storage PDA `+sender_recipient);
+    console.log(`pda associate `+pda_associate);
+
+}
+// pda_seed()
+pda_seed_token()
 main()
