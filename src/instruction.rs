@@ -33,12 +33,15 @@ pub struct ProcessFundStream{
 pub enum TokenInstruction {
     ProcessInitializeStream(ProcessInitializeStream),
     Processwithdrawstream(Processwithdrawstream),
-    Processcancelstream ,
+    ProcessCancelStream ,
     ProcessTokenStream(ProcessTokenStream),
     ProcessPauseStream,
     ProcessResumeStream,
     ProcessTokenWithdrawStream(ProcessTokenWithdrawStream),
-    ProcessFundStream(ProcessFundStream)
+    ProcessFundStream(ProcessFundStream),
+    ProcessCancelToken,
+    ProcessPauseToken,
+    ProcessResumeToken
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -64,7 +67,7 @@ impl TokenInstruction {
             }
             // Cancel stream instruction 
             2 => {
-                Self:: Processcancelstream
+                Self:: ProcessCancelStream
             }
              // Initialize Token stream 
              3 => {
@@ -91,6 +94,15 @@ impl TokenInstruction {
                 let (amount, _rest) = rest.split_at(8);
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessFundStream (ProcessFundStream{amount})
+            }
+            8 => {
+                Self:: ProcessCancelToken
+            }
+            9 => {
+                Self:: ProcessPauseToken
+            }
+            10 => {
+                Self:: ProcessResumeToken
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
