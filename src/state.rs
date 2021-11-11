@@ -15,7 +15,6 @@ pub struct Escrow{
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
-    pub escrow: Pubkey,
 }
 
 /// Initializeing token stream state
@@ -29,6 +28,5 @@ pub struct TokenEscrow{
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
-    pub escrow: Pubkey,
     pub token_mint: Pubkey
 }

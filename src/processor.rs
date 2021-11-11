@@ -106,7 +106,6 @@ impl Processor {
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
-        escrow.escrow = *pda_data.key;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
@@ -353,7 +352,6 @@ impl Processor {
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
-        escrow.escrow = *pda_data.key;
         escrow.token_mint = *token_mint_info.key;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
