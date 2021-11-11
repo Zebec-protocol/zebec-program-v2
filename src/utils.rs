@@ -6,9 +6,6 @@ use solana_program::{
     entrypoint::ProgramResult,
 };
 use super::error::TokenError;
-use crate::{
-    PREFIX,
-};
 
 pub fn get_master_address_and_bump_seed(
     sender: &Pubkey,
@@ -16,19 +13,6 @@ pub fn get_master_address_and_bump_seed(
 ) -> (Pubkey, u8) {
     Pubkey::find_program_address(
         &[
-            &sender.to_bytes(),
-        ],
-        program_id,
-    )
-}
-
-pub fn get_master_token_address_and_bump_seed(
-    sender: &Pubkey,
-    program_id: &Pubkey,
-) -> (Pubkey, u8) {
-    Pubkey::find_program_address(
-        &[
-            PREFIX.as_bytes(),
             &sender.to_bytes(),
         ],
         program_id,

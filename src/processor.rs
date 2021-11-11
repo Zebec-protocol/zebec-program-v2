@@ -33,7 +33,6 @@ use crate::{
         assert_keys_equal,
         create_pda_account,
         get_master_address_and_bump_seed,
-        get_master_token_address_and_bump_seed,
         create_transfer,
     }
 };
@@ -694,22 +693,45 @@ impl Processor {
     fn process_deposit_token(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
+        let pda = next_account_info(account_info_iter)?; // pda
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let token_mint_info = next_account_info(account_info_iter)?; // token mint
+        let rent_info = next_account_info(account_info_iter)?; // rent address
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
+        let system_program = next_account_info(account_info_iter)?;
+        let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
 
-        let (account_address, _bump_seed) = get_master_token_address_and_bump_seed(
+        let (account_address, _bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
         );
 
         let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address,token_mint_info.key);
-
+        // msg!("{:?}",accounts);
+        msg!("pda: {}token: {}",account_address,pda_associated_token);
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
+        }
+        if pda_associated_info.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    source_account_info.key,
+                    pda.key,
+                    token_mint_info.key,
+                ),&[
+                    source_account_info.clone(),
+                    pda_associated_info.clone(),
+                    pda.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
         }
         invoke(
             &spl_token::instruction::transfer(
@@ -725,6 +747,7 @@ impl Processor {
                 associated_token_address.clone(),
                 pda_associated_info.clone(),
                 source_account_info.clone(),
+                system_program.clone()
             ],
         )?;
         Ok(())
@@ -796,6 +819,7 @@ impl Processor {
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
         let pda = next_account_info(account_info_iter)?; // pda
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
+        let system_program = next_account_info(account_info_iter)?; // system program 
 
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
@@ -806,7 +830,8 @@ impl Processor {
             &[bump_seed],
         ];
         let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address,token_mint_info.key);
-
+        let source_associated_token = spl_associated_token_account::get_associated_token_address(&source_account_info.key,token_mint_info.key);
+        assert_keys_equal(source_associated_token, *associated_token_address.key)?;
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(account_address, *pda.key)?;
         assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
@@ -827,6 +852,7 @@ impl Processor {
                 pda_associated_info.clone(),
                 associated_token_address.clone(),
                 pda.clone(),
+                system_program.clone()
             ],&[&pda_signer_seeds[..]],
         )?;
         Ok(())

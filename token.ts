@@ -24,9 +24,9 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        'ckrRFvTLgxayM9qkSbpHH5iDRGbSRTNfScjmAA1XoUM') // sender/recipient address
+        '3a3E7QssXxj3YAruj8AMe69pcpxMiw3uXVn4y4bvM7tU') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
-            'EeZhWJ1P4kzXyXrrVLcQwy4mS2m96jcavc28rDmbhQVS'); //token address
+            '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58()) //
 
     
@@ -35,7 +35,7 @@ async function main() {
 
 async function pda_seed() {
 
-    let address = new PublicKey("ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4"); // sender address
+    let address = new PublicKey("3pWLEfiiZWwrhHxHs7LC4w5sWWgSqVRm9bLEuKdbuepi"); // sender address
     console.log(address)
     let recipient = new PublicKey("BvNbvbaE6NKdGXMYK3Vtrosq46vdxDwif4SJ9qLzEJ7b"); // sender address
     let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
@@ -47,7 +47,7 @@ async function pda_seed() {
 }
 async function pda_seed_token() {
 
-    let address = new PublicKey("53DSJERz6TMo1ChTkjHJedfeQqqHgUXraBVbeWRdujLx"); // sender address
+    let address = new PublicKey("9PDdQfhsaH42BMuSWJcqxmYLFNwrZiLkdE5ZbR6whi4k"); // sender address
     console.log(address)
     let recipient = new PublicKey("H1sCz7VqAzAPeMvRJvXXneHbMq439fZUggcF1oyXguFd"); // sender address
     let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
@@ -60,10 +60,10 @@ async function pda_seed_token() {
     let pda_associate = await PublicKey.findProgramAddress([Buffer.from(pda_associated, 'utf8'),address.toBuffer(),recipient.toBuffer()], base58publicKey);
 
     console.log(`Master PDA: `+validProgramAddress);
-    console.log(`Storage PDA `+sender_recipient);
-    console.log(`Sender associated  `+ await (await findAssociatedTokenAddress(address,wallet2)).toBase58()) // 
-    console.log(`Receiver associated  `+ await (await findAssociatedTokenAddress(recipient,wallet2)).toBase58()) // 
-    console.log(`pda associate `+pda_associate);
+    // console.log(`Storage PDA `+sender_recipient);
+    // console.log(`Sender associated  `+ await (await findAssociatedTokenAddress(address,wallet2)).toBase58()) // 
+    // console.log(`Receiver associated  `+ await (await findAssociatedTokenAddress(recipient,wallet2)).toBase58()) // 
+    // console.log(`pda associate `+pda_associate);
 
 
 }

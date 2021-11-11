@@ -12,7 +12,6 @@ use solana_program::{
     pubkey::Pubkey,
     program_error::PrintProgramError,
 };
-pub const PREFIX: &str = "token";
 
 entrypoint!(process_instruction);
 fn process_instruction(
