@@ -510,7 +510,7 @@ impl Processor {
 
         assert_keys_equal(*token_mint_info.key, escrow.token_mint)?;
 
-        let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,token_mint_info.key);
+        let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,&escrow.token_mint);
 
         assert_keys_equal(receiver_associated_account_check, *receiver_associated_info.key)?;
 
