@@ -32,8 +32,3 @@ pub struct TokenEscrow{
     pub escrow: Pubkey,
     pub token_mint: Pubkey
 }
-#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
-pub enum TokenPause {
-    Paused,
-    UnPaused,
-}
