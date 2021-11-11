@@ -169,7 +169,7 @@ impl Processor {
         }
         escrow.amount = escrow.amount-amount;
 
-        // Closing account to send rent to master pda
+        // Closing account to send rent to sender
         if escrow.amount == 0 { 
             let dest_starting_lamports = source_account_info.lamports();
             **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -226,7 +226,7 @@ impl Processor {
             pda_signer_seeds
         )?;
         // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
-        // Sending pda data rent to pda 
+        // Closing account to send rent to sender
         let dest_starting_lamports = source_account_info.lamports();
         **source_account_info.lamports.borrow_mut() = dest_starting_lamports
             .checked_add(pda_data.lamports())
