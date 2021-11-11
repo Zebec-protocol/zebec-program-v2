@@ -4,9 +4,9 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
-/// Initializeing stream states
+/// Initializeing solana stream states
 #[repr(C)]
-#[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, Default, PartialEq)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub struct Escrow{
     pub start_time: u64,
     pub end_time: u64,
@@ -17,7 +17,13 @@ pub struct Escrow{
     pub recipient: Pubkey,
     pub escrow: Pubkey,
 }
-/// Initializeing token stream states
+
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub enum NativePause {
+    Paused,
+    UnPaused,
+}
+/// Initializeing token stream state
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, Default, PartialEq)]
 pub struct TokenEscrow{
@@ -29,4 +35,10 @@ pub struct TokenEscrow{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub escrow: Pubkey,
+    pub token_mint: Pubkey
+}
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub enum TokenPause {
+    Paused,
+    UnPaused,
 }

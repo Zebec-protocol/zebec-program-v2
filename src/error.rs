@@ -20,7 +20,7 @@ pub enum TokenError {
     #[error("Invalid instruction")]
     InvalidInstruction,
     /// Streams whose time is already passed
-    #[error("Stream already completed")]
+    #[error("Time has already passed")]
     TimeEnd,
     #[error("Stream already cancelled")]
     AlreadyCancel,
@@ -37,7 +37,13 @@ pub enum TokenError {
     AlreadyPaused,
     // Already Resumed or not paused
     #[error("Transaction is not paused")]
-    AlreadyResumed
+    AlreadyResumed,
+    // Already Resumed or not paused
+    #[error("Stream Already Created")]
+    StreamAlreadyCreated,
+    // Already Resumed or not paused
+    #[error("Stream has not been started")]
+    StreamNotStarted,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

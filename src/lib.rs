@@ -13,7 +13,6 @@ use solana_program::{
     program_error::PrintProgramError,
 };
 pub const PREFIX: &str = "token";
-pub const PREFIX_ASSOCIATED: &str = "pda_associated";
 
 entrypoint!(process_instruction);
 fn process_instruction(

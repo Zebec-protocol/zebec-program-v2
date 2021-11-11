@@ -4,11 +4,11 @@ use solana_program::{
 };
 use crate::{
     error::TokenError,
-
 };
 use std::convert::TryInto;
+
 /// Initialize stream data
-pub struct ProcessInitializeStream{
+pub struct ProcessSolStream{
     pub start_time: u64,
     pub end_time: u64,
     pub amount: u64,
@@ -19,7 +19,7 @@ pub struct ProcessTokenStream{
     pub end_time: u64,
     pub amount: u64,
 }
-pub struct Processwithdrawstream{
+pub struct ProcessSolWithdrawStream{
     /// Amount of fund
     pub amount: u64,
 }
@@ -27,21 +27,44 @@ pub struct ProcessTokenWithdrawStream{
     /// Amount of fund
     pub amount: u64,
 }
-pub struct ProcessFundStream{
+pub struct ProcessDepositSol{
     pub amount: u64,
 }
+pub struct ProcessDepositToken{
+    pub amount: u64,
+}
+pub struct ProcessFundSol{
+    pub end_time: u64,
+    pub amount: u64,
+}
+pub struct ProcessFundToken{
+    pub end_time: u64,
+    pub amount: u64,
+}
+pub struct ProcessWithdrawSol{
+    pub amount: u64,
+}
+pub struct ProcessWithdrawToken{
+    pub amount: u64,
+}
+
 pub enum TokenInstruction {
-    ProcessInitializeStream(ProcessInitializeStream),
-    Processwithdrawstream(Processwithdrawstream),
-    ProcessCancelStream ,
+    ProcessSolStream(ProcessSolStream),
+    ProcessSolWithdrawStream(ProcessSolWithdrawStream),
+    ProcessCancelSolStream ,
     ProcessTokenStream(ProcessTokenStream),
-    ProcessPauseStream,
-    ProcessResumeStream,
+    ProcessPauseSolStream,
+    ProcessResumeSolStream,
     ProcessTokenWithdrawStream(ProcessTokenWithdrawStream),
-    ProcessFundStream(ProcessFundStream),
-    ProcessCancelToken,
-    ProcessPauseToken,
-    ProcessResumeToken
+    ProcessDepositSol(ProcessDepositSol),
+    ProcessCancelTokenStream,
+    ProcessPauseTokenStream,
+    ProcessResumeTokenStream,
+    ProcessDepositToken(ProcessDepositToken),
+    ProcessFundSol(ProcessFundSol),
+    ProcessFundToken(ProcessFundToken),
+    ProcessWithdrawSol(ProcessWithdrawSol),
+    ProcessWithdrawToken(ProcessWithdrawToken)
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -57,17 +80,17 @@ impl TokenInstruction {
                 let start_time = start_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-                Self::ProcessInitializeStream (ProcessInitializeStream{start_time,end_time,amount})
+                Self::ProcessSolStream (ProcessSolStream{start_time,end_time,amount})
             }
             // Withdraw stream instruction 
             1 => {
                 let (amount, _rest) = rest.split_at(8);
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-                Self::Processwithdrawstream (Processwithdrawstream{amount})
+                Self::ProcessSolWithdrawStream (ProcessSolWithdrawStream{amount})
             }
             // Cancel stream instruction 
             2 => {
-                Self:: ProcessCancelStream
+                Self:: ProcessCancelSolStream
             }
              // Initialize Token stream 
              3 => {
@@ -80,10 +103,10 @@ impl TokenInstruction {
                 Self::ProcessTokenStream (ProcessTokenStream{start_time,end_time,amount})
             }
             4 =>{
-                Self::ProcessPauseStream
+                Self::ProcessPauseSolStream
             }
             5 =>{
-                Self::ProcessResumeStream
+                Self::ProcessResumeSolStream
             }
             6 =>{
                 let (amount, _rest) = rest.split_at(8);
@@ -93,16 +116,45 @@ impl TokenInstruction {
             7 => {
                 let (amount, _rest) = rest.split_at(8);
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-                Self::ProcessFundStream (ProcessFundStream{amount})
+                Self::ProcessDepositSol(ProcessDepositSol{amount})
             }
             8 => {
-                Self:: ProcessCancelToken
+                Self:: ProcessCancelTokenStream
             }
             9 => {
-                Self:: ProcessPauseToken
+                Self:: ProcessPauseTokenStream
             }
             10 => {
-                Self:: ProcessResumeToken
+                Self:: ProcessResumeTokenStream
+            }
+            11 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessDepositToken(ProcessDepositToken{amount})
+            }
+            12 => {
+                let (end_time, rest) = rest.split_at(8);
+                let (amount, _rest) = rest.split_at(8);
+                let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessFundSol(ProcessFundSol{end_time,amount})
+            }
+            13 => {
+                let (end_time, rest) = rest.split_at(8);
+                let (amount, _rest) = rest.split_at(8);
+                let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessFundToken(ProcessFundToken{end_time,amount})
+            }
+            14 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessWithdrawSol(ProcessWithdrawSol{amount})
+            }
+            15 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessWithdrawToken(ProcessWithdrawToken{amount})
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
