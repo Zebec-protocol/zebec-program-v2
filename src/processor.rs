@@ -82,7 +82,7 @@ impl Processor {
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
         let fees = Fees::get()?;
-        create_pda_account( // Remove invoke_signed 
+        create_pda_account( 
             pda,
             transfer_amount,
             std::mem::size_of::<Escrow>(),
