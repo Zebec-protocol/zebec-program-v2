@@ -484,7 +484,6 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // pda associated token info 
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
-        
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -720,10 +719,13 @@ impl Processor {
         Ok(())
     }
     /// Function to fund ongoing solana streaming
-    fn process_fund_stream(accounts: &[AccountInfo],end_time: u64, amount: u64,) -> ProgramResult {
+    fn process_fund_sol(accounts: &[AccountInfo],end_time: u64, amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //pda
+        if pda_data.data_is_empty(){
+            return Err(ProgramError::UninitializedAccount.into());
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -732,9 +734,7 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         escrow.end_time = end_time;
-        escrow.amount = amount;
-        escrow.escrow = *pda_data.key;
-        msg!("{:?}",escrow);
+        escrow.amount = escrow.amount+amount;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -743,6 +743,10 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //sender
+
+        if pda_data.data_is_empty(){
+            return Err(ProgramError::UninitializedAccount.into());
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -752,8 +756,6 @@ impl Processor {
         }
         escrow.end_time = end_time;
         escrow.amount = amount;
-        escrow.escrow = *pda_data.key;
-        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -910,15 +912,15 @@ impl Processor {
                 end_time,
                 amount,
             }) => {
-                msg!("Instruction: Fund Stream");
-                Self::process_fund_token(accounts,end_time,amount) 
+                msg!("Instruction: Fund Solana");
+                Self::process_fund_sol(accounts,end_time,amount) 
             }
             TokenInstruction::ProcessFundToken(ProcessFundToken {
                 end_time,
                 amount,
             }) => {
                 msg!("Instruction: Fund token");
-                Self::process_fund_stream(accounts,end_time,amount) 
+                Self::process_fund_token(accounts,end_time,amount) 
             }
             TokenInstruction::ProcessWithdrawSol(ProcessWithdrawSol {
                 amount,
