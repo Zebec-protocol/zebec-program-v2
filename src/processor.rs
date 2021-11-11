@@ -169,7 +169,7 @@ impl Processor {
         }
         escrow.amount = escrow.amount-amount;
 
-        // Closing account to send rent to sender 
+        // Closing account to send rent to master pda
         if escrow.amount == 0 { 
             let dest_starting_lamports = source_account_info.lamports();
             **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -198,9 +198,6 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64;
         // Amount that recipient should receive.  
         let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
-        if !source_account_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature); 
-        }
         if now >= escrow.end_time {
             msg!("Stream already completed");
             return Err(TokenError::StreamNotStarted.into());
@@ -228,17 +225,8 @@ impl Processor {
             dest_account_amount,
             pda_signer_seeds
         )?;
-        // Sending pending streaming payment to sender 
-        let source_account_amount = escrow.amount-dest_account_amount;
-        create_transfer(
-            pda,
-            source_account_info,
-            system_program,
-            source_account_amount,
-            pda_signer_seeds
-        )?;
-
-        // Sending pda rent to sender account
+        // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
+        // Sending pda data rent to pda 
         let dest_starting_lamports = source_account_info.lamports();
         **source_account_info.lamports.borrow_mut() = dest_starting_lamports
             .checked_add(pda_data.lamports())
@@ -492,11 +480,11 @@ impl Processor {
         let token_program_info = next_account_info(account_info_iter)?; // {TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA}
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
         let rent_info = next_account_info(account_info_iter)?; // rent address
-        let sender_associated_info = next_account_info(account_info_iter)?; // source_account_info associated token account address
         let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
         let pda_associated_info = next_account_info(account_info_iter)?; // pda associated token info 
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
+        
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -508,9 +496,7 @@ impl Processor {
 
         // Amount that recipient should receive.  
         let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
-        if !source_account_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature); 
-        }
+
         if now < escrow.start_time {
             allowed_amt = escrow.amount;
         }
@@ -525,10 +511,8 @@ impl Processor {
 
         assert_keys_equal(*token_mint_info.key, escrow.token_mint)?;
 
-        let sender_associated_account_check = get_associated_token_address(source_account_info.key,token_mint_info.key);
         let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,token_mint_info.key);
 
-        assert_keys_equal(sender_associated_account_check, *sender_associated_info.key)?;
         assert_keys_equal(receiver_associated_account_check, *receiver_associated_info.key)?;
 
         // Sending pending streaming payment to sender 
@@ -572,25 +556,10 @@ impl Processor {
                 pda_associated_info.clone(),
                 receiver_associated_info.clone(),
                 pda.clone(),
+                system_program.clone()
             ],&[&pda_signer_seeds[..]],
         )?;
-        let source_account_amount = escrow.amount-dest_account_amount;
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                token_program_info.key,
-                pda_associated_info.key,
-                sender_associated_info.key,
-                pda.key,
-                &[pda.key],
-                source_account_amount
-            )?,
-            &[
-                token_program_info.clone(),
-                pda_associated_info.clone(),
-                sender_associated_info.clone(),
-                pda.clone(),
-            ],&[&pda_signer_seeds[..]],
-        )?;
+        // We don't need to send tkens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
         let dest_starting_lamports = source_account_info.lamports();
         **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -598,8 +567,8 @@ impl Processor {
             .ok_or(TokenError::Overflow)?;
 
         **pda_data.lamports.borrow_mut() = 0;
+
         escrow.amount = 0;
-        // escrow.amount = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -828,7 +797,7 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let token_mint_info = next_account_info(account_info_iter)?; // token mint
-        let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address of token you are initializing 
+        let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address
         let pda = next_account_info(account_info_iter)?; // pda
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         let system_program = next_account_info(account_info_iter)?; // system program 
