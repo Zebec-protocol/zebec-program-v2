@@ -708,8 +708,6 @@ impl Processor {
         );
 
         let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address,token_mint_info.key);
-        // msg!("{:?}",accounts);
-        msg!("pda: {}token: {}",account_address,pda_associated_token);
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
         if !source_account_info.is_signer {
@@ -755,8 +753,15 @@ impl Processor {
     /// Function to fund ongoing solana streaming
     fn process_fund_stream(accounts: &[AccountInfo],end_time: u64, amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let pda_data = next_account_info(account_info_iter)?;  //sender
+        let  source_account_info = next_account_info(account_info_iter)?;  //sender
+        let pda_data = next_account_info(account_info_iter)?;  //pda
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         escrow.end_time = end_time;
         escrow.amount = amount;
         escrow.escrow = *pda_data.key;
@@ -767,8 +772,15 @@ impl Processor {
     /// Function to fund ongoing token streaming
     fn process_fund_token(accounts: &[AccountInfo],end_time: u64, amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
+        let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //sender
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         escrow.end_time = end_time;
         escrow.amount = amount;
         escrow.escrow = *pda_data.key;
