@@ -515,7 +515,7 @@ impl Processor {
         assert_keys_equal(receiver_associated_account_check, *receiver_associated_info.key)?;
 
         // Sending pending streaming payment to sender 
-        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+        let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
         );
@@ -523,6 +523,10 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
+
+        let pda_associated_token = get_associated_token_address(&account_address,&escrow.token_mint);
+        assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
+
         if receiver_associated_info.data_is_empty(){
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
