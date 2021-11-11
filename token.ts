@@ -24,7 +24,7 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        'J75jd3kjsABQSDrEdywcyhmbq8eHDowfW9xtEWsVALy9') // sender/recipient address
+        'ckrRFvTLgxayM9qkSbpHH5iDRGbSRTNfScjmAA1XoUM') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58()) //

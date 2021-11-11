@@ -18,11 +18,6 @@ pub struct Escrow{
     pub escrow: Pubkey,
 }
 
-#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
-pub enum NativePause {
-    Paused,
-    UnPaused,
-}
 /// Initializeing token stream state
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, Default, PartialEq)]
