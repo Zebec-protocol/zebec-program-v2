@@ -118,12 +118,11 @@ impl Processor {
         let pda = next_account_info(account_info_iter)?; // locked fund
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
-
-        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
-        let now = Clock::get()?.unix_timestamp as u64;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
+        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        let now = Clock::get()?.unix_timestamp as u64;
         if now <= escrow.start_time {
             return Err(TokenError::StreamNotStarted.into());
         }

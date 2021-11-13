@@ -24,7 +24,7 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        '26SAvNeaRQSh4J53kQAhC63H7UDxndWbDGGshCDVuXWR') // sender/recipient address
+        'ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58()) //
@@ -34,15 +34,20 @@ async function main() {
 
 
 async function pda_seed() {
-
+    const wallet: PublicKey = new PublicKey(
+        'ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4') // sender/recipient address
+    const wallet2: PublicKey = new PublicKey(
+            '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
     let address = new PublicKey("65AfdAoMtet53m3xuW7BSgkKaFk8bWFJFGXB3NdaLuvL"); // sender address
     console.log(address)
     let recipient = new PublicKey("BvNbvbaE6NKdGXMYK3Vtrosq46vdxDwif4SJ9qLzEJ7b"); // sender address
     let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
+    let base58publicKeyspl  =new PublicKey ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+    let sender_recipientw = await PublicKey.findProgramAddress([wallet.toBuffer(),base58publicKeyspl.toBuffer(),wallet2.toBuffer()], SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID);
     let validProgramAddress = await PublicKey.findProgramAddress([address.toBuffer()], base58publicKey);
     let sender_recipient = await PublicKey.findProgramAddress([address.toBuffer(),recipient.toBuffer()], base58publicKey);
     console.log(`Master PDA: `+validProgramAddress);
-    console.log(`Storage PDA `+sender_recipient);
+    console.log(`Storage PDA `+sender_recipientw);
 
 }
 main()
