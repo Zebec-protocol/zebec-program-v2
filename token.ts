@@ -38,10 +38,10 @@ async function pda_seed() {
         'ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
-    let address = new PublicKey("65AfdAoMtet53m3xuW7BSgkKaFk8bWFJFGXB3NdaLuvL"); // sender address
+    let address = new PublicKey("ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4"); // sender address
     console.log(address)
     let recipient = new PublicKey("BvNbvbaE6NKdGXMYK3Vtrosq46vdxDwif4SJ9qLzEJ7b"); // sender address
-    let base58publicKey = new PublicKey('9Ayh2hS3k5fTn6V9Ks7NishUp5Jz19iosK3tYPAcNhsp'); // program address
+    let base58publicKey = new PublicKey('7FNWTfCo3AyRBFCvr49daqKHehdn2GjNgpjuTsqy5twk'); // program address
     let base58publicKeyspl  =new PublicKey ("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
     let sender_recipientw = await PublicKey.findProgramAddress([wallet.toBuffer(),base58publicKeyspl.toBuffer(),wallet2.toBuffer()], SPL_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM_ID);
     let validProgramAddress = await PublicKey.findProgramAddress([address.toBuffer()], base58publicKey);

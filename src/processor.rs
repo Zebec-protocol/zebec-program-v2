@@ -5,7 +5,6 @@ use solana_program::{
     program_error::{PrintProgramError,ProgramError},
     decode_error::DecodeError,
     entrypoint::ProgramResult,
-    system_instruction::{create_account},
     program::{invoke,invoke_signed},
     pubkey::Pubkey,
     sysvar::{rent::Rent,fees::Fees,clock::Clock,Sysvar},
@@ -34,6 +33,7 @@ use crate::{
         create_pda_account,
         get_master_address_and_bump_seed,
         create_transfer,
+        create_transfer_unsigned
     }
 };
 use spl_associated_token_account::get_associated_token_address;
@@ -45,7 +45,6 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let pda = next_account_info(account_info_iter)?; // master pda
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; // system program
 
@@ -65,16 +64,6 @@ impl Processor {
 
         assert_keys_equal(system_program::id(), *system_program.key)?;
 
-        let (account_address, bump_seed) = get_master_address_and_bump_seed(
-            source_account_info.key,
-            program_id,
-        );
-        let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
-            &[bump_seed],
-        ];
-        assert_keys_equal(account_address, *pda.key)?;
-
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
         }
@@ -83,20 +72,18 @@ impl Processor {
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
         let fees = Fees::get()?;
         create_pda_account( 
-            pda,
+            source_account_info,
             transfer_amount,
             std::mem::size_of::<Escrow>(),
             program_id,
             system_program,
-            pda_data,
-            pda_signer_seeds
+            pda_data
         )?;
-        create_transfer(
-            pda,
+        create_transfer_unsigned(
+            source_account_info,
             dest_account_info,
             system_program,
             fees.fee_calculator.lamports_per_signature * 2,
-            pda_signer_seeds
         )?;
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         escrow.start_time = start_time;
@@ -294,7 +281,6 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let pda = next_account_info(account_info_iter)?; // master pda
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let system_program = next_account_info(account_info_iter)?; // system address
@@ -314,34 +300,32 @@ impl Processor {
         if now > end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        let space_size = std::mem::size_of::<TokenEscrow>() as u64;
+        let space_size = std::mem::size_of::<TokenEscrow>();
 
-        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+        let (_account_address, _bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
         );
-        let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
-            &[bump_seed],
-        ];
 
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
         }
-        let create_account_instruction = create_account(
-            pda.key,
-            pda_data.key,
-            rent.minimum_balance(std::mem::size_of::<TokenEscrow>()),
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
+
+        create_pda_account( 
+            source_account_info,
+            transfer_amount,
             space_size,
             program_id,
-        );
-        invoke_signed(
-            &create_account_instruction,
-            &[
-                pda.clone(),
-                pda_data.clone(),
-                system_program.clone(),
-            ],&[&pda_signer_seeds[..]]
+            system_program,
+            pda_data
+        )?;
+        let fees = Fees::get()?;
+        create_transfer_unsigned(
+            source_account_info,
+            dest_account_info,
+            system_program,
+            fees.fee_calculator.lamports_per_signature * 2,
         )?;
         let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
         escrow.start_time = start_time;

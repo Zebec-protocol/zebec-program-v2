@@ -2,7 +2,7 @@ use solana_program::{
     pubkey::Pubkey,
     account_info::{AccountInfo},
     system_instruction,
-    program::{invoke_signed},
+    program::{invoke_signed,invoke},
     entrypoint::ProgramResult,
 };
 use super::error::TokenError;
@@ -33,9 +33,8 @@ pub fn create_pda_account<'a>(
     owner: &Pubkey,
     system_program: &AccountInfo<'a>,
     new_pda_account: &AccountInfo<'a>,
-    new_pda_signer_seeds: &[&[u8]],
 ) -> ProgramResult {
-        invoke_signed(
+        invoke(
             &system_instruction::create_account(
                 payer.key,
                 new_pda_account.key,
@@ -48,7 +47,6 @@ pub fn create_pda_account<'a>(
                 new_pda_account.clone(),
                 system_program.clone(),
             ],
-            &[new_pda_signer_seeds],
         )
     }
 
@@ -71,5 +69,25 @@ pub fn create_transfer<'a>(
             system_program.clone()
         ],
         &[seeds],
+    )
+}
+
+pub fn create_transfer_unsigned<'a>(
+    sender: &AccountInfo<'a>,
+    receiver: &AccountInfo<'a>,
+    system_program: &AccountInfo<'a>,
+    amount: u64,
+) -> ProgramResult {
+    invoke(
+        &system_instruction::transfer(
+            sender.key,
+            receiver.key,
+            amount
+        ),
+        &[
+            sender.clone(),
+            receiver.clone(),
+            system_program.clone()
+        ],
     )
 }
