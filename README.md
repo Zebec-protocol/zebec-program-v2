@@ -27,5 +27,5 @@ solana logs
 
 ### Deploy the on-chain program
 ```bash
-solana program deploy $(pwd)/target/deploy/TheStream.so
+solana program deploy $(pwd)/target/deploy/zebec.so
 ```
