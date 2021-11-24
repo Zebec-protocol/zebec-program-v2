@@ -150,9 +150,9 @@ impl Processor {
         )?;
         if escrow.paused == 1{
             msg!("{}{}",escrow.withdraw_limit,amount);
-            escrow.withdraw_limit = escrow.withdraw_limit-amount
+            escrow.withdraw_limit -= amount;
         }
-        escrow.amount = escrow.amount-amount;
+        escrow.amount -= amount;
 
         // Closing account to send rent to sender
         if escrow.amount == 0 { 
@@ -435,13 +435,13 @@ impl Processor {
                 receiver_associated_info.clone(),
                 pda.clone(),
                 system_program.clone()
-            ],&[&pda_signer_seeds[..]],
+            ],&[&pda_signer_seeds],
         )?;
         if escrow.paused == 1{
             msg!("{}{}",escrow.withdraw_limit,amount);
-            escrow.withdraw_limit = escrow.withdraw_limit-amount
+            escrow.withdraw_limit -= amount;
         }
-        escrow.amount = escrow.amount-amount;
+        escrow.amount  -= amount;
         // Closing account to send rent to sender 
         if escrow.amount == 0 { 
             let dest_starting_lamports = source_account_info.lamports();
@@ -543,7 +543,7 @@ impl Processor {
                 receiver_associated_info.clone(),
                 pda.clone(),
                 system_program.clone()
-            ],&[&pda_signer_seeds[..]],
+            ],&[&pda_signer_seeds],
         )?;
         // We don't need to send tkens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
@@ -711,7 +711,7 @@ impl Processor {
         let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //pda
         if pda_data.data_is_empty(){
-            return Err(ProgramError::UninitializedAccount.into());
+            return Err(ProgramError::UninitializedAccount);
         }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -721,7 +721,7 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         escrow.end_time = end_time;
-        escrow.amount = escrow.amount+amount;
+        escrow.amount += amount;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -732,7 +732,7 @@ impl Processor {
         let pda_data = next_account_info(account_info_iter)?;  //sender
 
         if pda_data.data_is_empty(){
-            return Err(ProgramError::UninitializedAccount.into());
+            return Err(ProgramError::UninitializedAccount);
         }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -776,7 +776,7 @@ impl Processor {
                 pda.clone(),
                 source_account_info.clone(),
                 system_program.clone()
-            ],&[&pda_signer_seeds[..]],
+            ],&[&pda_signer_seeds],
         )?;
         Ok(())
     }
@@ -800,7 +800,7 @@ impl Processor {
             &[bump_seed],
         ];
         let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address,token_mint_info.key);
-        let source_associated_token = spl_associated_token_account::get_associated_token_address(&source_account_info.key,token_mint_info.key);
+        let source_associated_token = spl_associated_token_account::get_associated_token_address(source_account_info.key,token_mint_info.key);
         assert_keys_equal(source_associated_token, *associated_token_address.key)?;
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(account_address, *pda.key)?;
@@ -823,7 +823,7 @@ impl Processor {
                 associated_token_address.clone(),
                 pda.clone(),
                 system_program.clone()
-            ],&[&pda_signer_seeds[..]],
+            ],&[&pda_signer_seeds],
         )?;
         Ok(())
     }

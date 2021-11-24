@@ -21,7 +21,7 @@ pub fn get_master_address_and_bump_seed(
 
 pub fn assert_keys_equal(key1: Pubkey, key2: Pubkey) -> ProgramResult {
     if key1 != key2 {
-        return Err(TokenError::PublicKeyMismatch.into())
+        Err(TokenError::PublicKeyMismatch.into())
     } else {
         Ok(())
     }

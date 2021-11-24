@@ -38,7 +38,7 @@ async function pda_seed() {
         'ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
             '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
-    let address = new PublicKey("ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4"); // sender address
+    let address = new PublicKey("438VPYxrTEr1YZgMJzGvvv79dB4ZXHBTPjDc4BLEpcMu"); // sender address
     console.log(address)
     let recipient = new PublicKey("BvNbvbaE6NKdGXMYK3Vtrosq46vdxDwif4SJ9qLzEJ7b"); // sender address
     let base58publicKey = new PublicKey('7FNWTfCo3AyRBFCvr49daqKHehdn2GjNgpjuTsqy5twk'); // program address
