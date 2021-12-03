@@ -280,7 +280,7 @@ impl Processor {
 
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
-        let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
             msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
@@ -663,7 +663,7 @@ impl Processor {
         }
         let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
-        let allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
             msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
