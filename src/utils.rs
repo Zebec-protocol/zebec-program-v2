@@ -50,6 +50,31 @@ pub fn create_pda_account<'a>(
         )
     }
 
+pub fn create_pda_account_signed<'a>(
+    payer: &AccountInfo<'a>,
+    amount: u64,
+    space: usize,
+    owner: &Pubkey,
+    system_program: &AccountInfo<'a>,
+    new_pda_account: &AccountInfo<'a>,
+    seeds: &[&[u8]],
+) -> ProgramResult {
+        invoke_signed(
+            &system_instruction::create_account(
+                payer.key,
+                new_pda_account.key,
+                amount,
+                space as u64,
+                owner,
+            ),
+            &[
+                payer.clone(),
+                new_pda_account.clone(),
+                system_program.clone(),
+            ],
+            &[seeds],
+        )
+    }
 pub fn create_transfer<'a>(
     sender: &AccountInfo<'a>,
     receiver: &AccountInfo<'a>,
@@ -89,5 +114,18 @@ pub fn create_transfer_unsigned<'a>(
             receiver.clone(),
             system_program.clone()
         ],
+    )
+}
+pub fn get_withdraw_data_and_bump_seed(
+    prefix: &str,
+    sender: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            prefix.as_bytes(),
+            &sender.to_bytes(),
+        ],
+        program_id,
     )
 }

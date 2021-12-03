@@ -26,15 +26,19 @@ use crate::{
         ProcessWithdrawToken,
         ProcessWithdrawSol
     },
-    state::{Escrow,TokenEscrow},
+    state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw},
     error::TokenError,
     utils::{
         assert_keys_equal,
         create_pda_account,
         get_master_address_and_bump_seed,
         create_transfer,
-        create_transfer_unsigned
-    }
+        create_transfer_unsigned,
+        get_withdraw_data_and_bump_seed,
+        create_pda_account_signed
+    },
+    PREFIX,
+    PREFIX_TOKEN
 };
 use spl_associated_token_account::get_associated_token_address;
 /// Program state handler.
@@ -46,8 +50,8 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
+        let withdraw_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; // system program
-
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
 
@@ -63,10 +67,35 @@ impl Processor {
         }
 
         assert_keys_equal(system_program::id(), *system_program.key)?;
-
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
         }
+        let (account_address, bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        let withdraw_data_signer_seeds: &[&[_]] = &[
+            PREFIX.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        assert_keys_equal(*withdraw_data.key,account_address )?;
+        if withdraw_data.data_is_empty(){
+            let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Withdraw>());
+            create_pda_account_signed(
+                source_account_info,
+                transfer_amount,
+                std::mem::size_of::<Withdraw>(),
+                program_id,
+                system_program,
+                withdraw_data,
+                withdraw_data_signer_seeds
+            )?;
+        }
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
 
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
@@ -104,7 +133,15 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?; // stream receiver
         let pda = next_account_info(account_info_iter)?; // locked fund
         let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
+
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -114,7 +151,7 @@ impl Processor {
             return Err(TokenError::StreamNotStarted.into());
         }
         // Recipient can only withdraw the money that is already streamed. 
-        let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let mut allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
             allowed_amt = escrow.amount;
         }
@@ -153,7 +190,6 @@ impl Processor {
             escrow.withdraw_limit -= amount;
         }
         escrow.amount -= amount;
-
         // Closing account to send rent to sender
         if escrow.amount == 0 { 
             let dest_starting_lamports = source_account_info.lamports();
@@ -163,6 +199,9 @@ impl Processor {
             **pda_data.lamports.borrow_mut() = 0;
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount -= amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
      /// Function to cancel solana streaming
@@ -172,17 +211,24 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda = next_account_info(account_info_iter)?; // locked fund
         let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         // Amount that recipient should receive.  
-        let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let mut allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
             msg!("Stream already completed");
             return Err(TokenError::StreamNotStarted.into());
@@ -210,6 +256,9 @@ impl Processor {
             dest_account_amount,
             pda_signer_seeds
         )?;
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += escrow.amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
         // Closing account to send rent to sender
         let dest_starting_lamports = source_account_info.lamports();
@@ -282,6 +331,7 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
+        let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let system_program = next_account_info(account_info_iter)?; // system address
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
@@ -302,10 +352,32 @@ impl Processor {
         }
         let space_size = std::mem::size_of::<TokenEscrow>();
 
-        let (_account_address, _bump_seed) = get_master_address_and_bump_seed(
+        let (account_address, bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX_TOKEN,
             source_account_info.key,
             program_id,
         );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
+        let withdraw_data_signer_seeds: &[&[_]] = &[
+            PREFIX_TOKEN.as_bytes(),
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        if withdraw_data.data_is_empty(){
+            let transfer_amount =  rent.minimum_balance(std::mem::size_of::<TokenWithdraw>());
+            create_pda_account_signed(
+                source_account_info,
+                transfer_amount,
+                std::mem::size_of::<TokenWithdraw>(),
+                program_id,
+                system_program,
+                withdraw_data,
+                withdraw_data_signer_seeds
+            )?;
+        }
+        let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
 
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
@@ -347,6 +419,7 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda = next_account_info(account_info_iter)?; // master pda
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
+        let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let token_program_info = next_account_info(account_info_iter)?; // {TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA}
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
         let rent_info = next_account_info(account_info_iter)?; // rent address
@@ -354,6 +427,13 @@ impl Processor {
         let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?;
+
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX_TOKEN,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
@@ -372,7 +452,7 @@ impl Processor {
             return Err(TokenError::StreamNotStarted.into());
         }
         // Recipient can only withdraw the money that is already streamed. 
-        let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let mut allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
             msg!("Stream has been successfully completed");
             allowed_amt = escrow.amount;
@@ -451,6 +531,9 @@ impl Processor {
             **pda_data.lamports.borrow_mut() = 0;
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount -= amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to cancel token streaming
@@ -460,6 +543,7 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda = next_account_info(account_info_iter)?; // master pda
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
+        let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let token_program_info = next_account_info(account_info_iter)?; // {TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA}
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
         let rent_info = next_account_info(account_info_iter)?; // rent address
@@ -467,6 +551,13 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // pda associated token info 
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
+
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX_TOKEN,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -477,7 +568,7 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64;
 
         // Amount that recipient should receive.  
-        let mut allowed_amt = (((now - escrow.start_time) as f64) / ((escrow.end_time - escrow.start_time) as f64) * escrow.amount as f64) as u64;
+        let mut allowed_amt = escrow.allowed_amt(now);
 
         if now < escrow.start_time {
             allowed_amt = escrow.amount;
@@ -545,6 +636,9 @@ impl Processor {
                 system_program.clone()
             ],&[&pda_signer_seeds],
         )?;
+        let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += escrow.amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send tkens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
         let dest_starting_lamports = source_account_info.lamports();
@@ -710,6 +804,8 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //pda
+        let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
+
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -723,6 +819,9 @@ impl Processor {
         escrow.end_time = end_time;
         escrow.amount += amount;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to fund ongoing token streaming
@@ -730,6 +829,7 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let  source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?;  //sender
+        let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
 
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
@@ -744,6 +844,9 @@ impl Processor {
         escrow.end_time = end_time;
         escrow.amount = amount;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Function to deposit solana
@@ -751,6 +854,7 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let pda = next_account_info(account_info_iter)?;
+        let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
         let system_program = next_account_info(account_info_iter)?;
 
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
@@ -766,18 +870,48 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        invoke_signed(
-            &solana_program::system_instruction::transfer(
-                pda.key,
-                source_account_info.key,
-                amount
-            ),
-            &[
-                pda.clone(),
-                source_account_info.clone(),
-                system_program.clone()
-            ],&[&pda_signer_seeds],
-        )?;
+        if withdraw_data.data_is_empty(){
+            invoke_signed(
+                &solana_program::system_instruction::transfer(
+                    pda.key,
+                    source_account_info.key,
+                    amount
+                ),
+                &[
+                    pda.clone(),
+                    source_account_info.clone(),
+                    system_program.clone()
+                ],&[&pda_signer_seeds],
+            )?;
+        }
+        else{
+            let allowed_amt = pda.lamports() - amount;
+            let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+            if allowed_amt < withdraw_state.amount {
+                return Err(TokenError::StreamedAmt.into()); 
+            }
+            invoke_signed(
+                &solana_program::system_instruction::transfer(
+                    pda.key,
+                    source_account_info.key,
+                    amount
+                ),
+                &[
+                    pda.clone(),
+                    source_account_info.clone(),
+                    system_program.clone()
+                ],&[&pda_signer_seeds],
+            )?;
+            withdraw_state.amount -= amount;
+            if withdraw_state.amount == 0 { 
+                let dest_starting_lamports = source_account_info.lamports();
+                **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                    .checked_add(withdraw_data.lamports())
+                    .ok_or(TokenError::Overflow)?;
+                **withdraw_data.lamports.borrow_mut() = 0;
+            }
+            withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        }
         Ok(())
     }
     /// Function to deposit token
@@ -788,6 +922,7 @@ impl Processor {
         let token_mint_info = next_account_info(account_info_iter)?; // token mint
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address
         let pda = next_account_info(account_info_iter)?; // pda
+        let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         let system_program = next_account_info(account_info_iter)?; // system program 
 
@@ -808,23 +943,58 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        invoke_signed(
-            &spl_token::instruction::transfer(
-                token_program_info.key,
-                pda_associated_info.key,
-                associated_token_address.key,
-                pda.key,
-                &[pda.key],
-                amount
-            )?,
-            &[
-                token_program_info.clone(),
-                pda_associated_info.clone(),
-                associated_token_address.clone(),
-                pda.clone(),
-                system_program.clone()
-            ],&[&pda_signer_seeds],
-        )?;
+        if withdraw_data.data_is_empty(){
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program_info.key,
+                    pda_associated_info.key,
+                    associated_token_address.key,
+                    pda.key,
+                    &[pda.key],
+                    amount
+                )?,
+                &[
+                    token_program_info.clone(),
+                    pda_associated_info.clone(),
+                    associated_token_address.clone(),
+                    pda.clone(),
+                    system_program.clone()
+                ],&[&pda_signer_seeds],
+            )?;
+        }
+        else{
+            let allowed_amt = pda.lamports() - amount;
+            let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+            if allowed_amt < withdraw_state.amount {
+                return Err(TokenError::StreamedAmt.into()); 
+            }
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program_info.key,
+                    pda_associated_info.key,
+                    associated_token_address.key,
+                    pda.key,
+                    &[pda.key],
+                    amount
+                )?,
+                &[
+                    token_program_info.clone(),
+                    pda_associated_info.clone(),
+                    associated_token_address.clone(),
+                    pda.clone(),
+                    system_program.clone()
+                ],&[&pda_signer_seeds],
+            )?;
+            withdraw_state.amount -= amount;
+            if withdraw_state.amount == 0 { 
+                let dest_starting_lamports = source_account_info.lamports();
+                **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                    .checked_add(withdraw_data.lamports())
+                    .ok_or(TokenError::Overflow)?;
+                **withdraw_data.lamports.borrow_mut() = 0;
+            }
+            withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        }
         Ok(())
     }
     /// Processes an [Instruction](enum.Instruction.html).
@@ -942,7 +1112,8 @@ impl PrintProgramError for TokenError {
             TokenError::AlreadyPaused=> msg!("Error: Transaction is already paused"),
             TokenError::AlreadyResumed=>msg!("Error: Transaction is not paused"),
             TokenError::StreamAlreadyCreated=>msg!("Stream Already Created"),
-            TokenError::StreamNotStarted=>msg!("Stream has not been started")
+            TokenError::StreamNotStarted=>msg!("Stream has not been started"),
+            TokenError::StreamedAmt=>msg!("Cannot withdraw streaming amount")
         }
     }
 }

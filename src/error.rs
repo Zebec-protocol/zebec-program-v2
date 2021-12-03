@@ -44,6 +44,9 @@ pub enum TokenError {
     // Already Resumed or not paused
     #[error("Stream has not been started")]
     StreamNotStarted,
+    // Withdraw more than streamed money
+    #[error("Cannot withdraw streaming amount")]
+    StreamedAmt,
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

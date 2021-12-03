@@ -16,7 +16,13 @@ pub struct Escrow{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
 }
-
+impl Escrow {
+    pub fn allowed_amt(&self, now: u64) -> u64 {
+        (
+        ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
+        ) as u64 
+    }
+}
 /// Initializeing token stream state
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, Clone, Copy, Debug, Default, PartialEq)]
@@ -29,4 +35,22 @@ pub struct TokenEscrow{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub token_mint: Pubkey
+}
+impl TokenEscrow {
+    pub fn allowed_amt(&self, now: u64) -> u64 {
+        (
+        ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
+        ) as u64 
+    }
+}
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct Withdraw{
+    pub amount: u64,
+}
+
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct TokenWithdraw{
+    pub amount: u64,
 }

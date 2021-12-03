@@ -12,6 +12,8 @@ use solana_program::{
     pubkey::Pubkey,
     program_error::PrintProgramError,
 };
+pub const PREFIX: &str = "withdraw_sol";
+pub const PREFIX_TOKEN: &str = "withdraw_token";
 
 entrypoint!(process_instruction);
 fn process_instruction(
