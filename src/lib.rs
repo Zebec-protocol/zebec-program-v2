@@ -14,6 +14,10 @@ use solana_program::{
 };
 pub const PREFIX: &str = "withdraw_sol";
 pub const PREFIX_TOKEN: &str = "withdraw_token";
+/// Minimum number of multisignature signers (min N)
+pub const MIN_SIGNERS: usize = 1;
+/// Maximum number of multisignature signers (max N)
+pub const MAX_SIGNERS: usize = 11;
 
 entrypoint!(process_instruction);
 fn process_instruction(

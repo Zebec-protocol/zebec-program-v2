@@ -1,9 +1,14 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
+    msg,
+    pubkey::Pubkey,
 };
+use {borsh::{BorshDeserialize}};
+
 use crate::{
     error::TokenError,
+    state::{WhiteList,Multisig}
 };
 use std::convert::TryInto;
 
@@ -47,7 +52,19 @@ pub struct ProcessWithdrawSol{
 pub struct ProcessWithdrawToken{
     pub amount: u64,
 }
-
+pub struct ProcessSwapSol{
+    pub amount: u64,
+}
+pub struct ProcessSwapToken{
+    pub amount: u64,
+}
+/// Initialize stream data
+pub struct ProcessSolMultiSigStream{
+    pub start_time: u64,
+    pub end_time: u64,
+    pub amount: u64,
+    pub signers : WhiteList
+}
 pub enum TokenInstruction {
     ProcessSolStream(ProcessSolStream),
     ProcessSolWithdrawStream(ProcessSolWithdrawStream),
@@ -64,7 +81,13 @@ pub enum TokenInstruction {
     ProcessFundSol(ProcessFundSol),
     ProcessFundToken(ProcessFundToken),
     ProcessWithdrawSol(ProcessWithdrawSol),
-    ProcessWithdrawToken(ProcessWithdrawToken)
+    ProcessWithdrawToken(ProcessWithdrawToken),
+    CreateWhitelist{
+        whitelist_v1:Multisig
+    },
+    ProcessSwapSol(ProcessSwapSol),
+    ProcessSwapToken(ProcessSwapToken),
+    // ProcessSolMultiSigStream(ProcessSolMultiSigStream)
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -156,6 +179,28 @@ impl TokenInstruction {
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessWithdrawToken(ProcessWithdrawToken{amount})
             }
+            16 => {
+                Self::CreateWhitelist{whitelist_v1:Multisig::try_from_slice(rest)?}
+            },
+            17 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessSwapSol(ProcessSwapSol{amount})
+            },
+            18 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessSwapToken(ProcessSwapToken{amount})
+            },
+            // 19 => {
+            //     let (start_time, rest) = rest.split_at(8);
+            //     let (end_time, rest) = rest.split_at(8);
+            //     let (amount, rest) = rest.split_at(8);
+            //     let start_time = start_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+            //     let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+            //     let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+            //     Self::ProcessSolMultiSigStream(ProcessSolMultiSigStream{start_time,end_time,amount,})
+            // }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }
