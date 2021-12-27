@@ -8,7 +8,7 @@ use {borsh::{BorshDeserialize}};
 
 use crate::{
     error::TokenError,
-    state::{WhiteList,Multisig}
+    state::{WhiteList,Multisig,Escrow_multisig}
 };
 use std::convert::TryInto;
 
@@ -87,7 +87,9 @@ pub enum TokenInstruction {
     },
     ProcessSwapSol(ProcessSwapSol),
     ProcessSwapToken(ProcessSwapToken),
-    // ProcessSolMultiSigStream(ProcessSolMultiSigStream)
+    Signed_by{
+        whitelist_v2:WhiteList
+    },
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -192,6 +194,9 @@ impl TokenInstruction {
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessSwapToken(ProcessSwapToken{amount})
             },
+            19 =>{
+                Self::Signed_by{whitelist_v2:WhiteList::try_from_slice(rest)?}
+            }
             // 19 => {
             //     let (start_time, rest) = rest.split_at(8);
             //     let (end_time, rest) = rest.split_at(8);

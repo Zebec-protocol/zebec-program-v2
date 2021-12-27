@@ -44,6 +44,8 @@ use crate::{
     PREFIX_TOKEN
 };
 use spl_associated_token_account::get_associated_token_address;
+use std::iter::Extend;
+use std::vec::Vec;
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
@@ -1108,15 +1110,17 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo],signers: Multisig) -> ProgramResult{
+    fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
         let withdraw_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; // system program
-        let mut save_owners = Multisig::from_account(pda_data)?;
-        save_owners.signers = signers.signers;
+        let mut save_owners = Escrow_multisig::from_account(pda_data)?;
+        save_owners.signed_by.push(signed_by);
+        // let mut test = vec::(WhiteList{ address: *source_account_info.key, counter: 0 })?
+        // test.push(save_owners.signed_by);
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
@@ -1391,6 +1395,10 @@ impl Processor {
             }) =>{
                 msg!("Instruction: Swapping token");
                 Self::process_swap_token(program_id,accounts,amount) 
+            }
+            TokenInstruction::Signed_by{whitelist_v2} => {
+                msg!("Instruction: Creating MultiSig");
+                Self::process_sign_stream(program_id,accounts,whitelist_v2) 
             }
         }
     }

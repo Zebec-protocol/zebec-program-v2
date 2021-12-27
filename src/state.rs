@@ -95,6 +95,7 @@ impl Multisig {
             Ok(md)
     }
 }
+
 /// Initializeing solana stream states
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
@@ -106,13 +107,14 @@ pub struct Escrow_multisig{
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
-    pub signed_by: WhiteList,
+    pub signed_by: Vec<WhiteList>,
 }
 impl Escrow_multisig {
     pub fn from_account(account:&AccountInfo)-> Result<Escrow_multisig, ProgramError> {
         let md: Escrow_multisig =try_from_slice_unchecked(&account.data.borrow_mut())?;
         Ok(md)
     }
+
     pub fn allowed_amt(&self, now: u64) -> u64 {
         (
         ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
