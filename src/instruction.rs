@@ -59,12 +59,12 @@ pub struct ProcessSwapToken{
     pub amount: u64,
 }
 /// Initialize stream data
-pub struct ProcessSolMultiSigStream{
-    pub start_time: u64,
-    pub end_time: u64,
-    pub amount: u64,
-    pub signers : WhiteList
-}
+// pub struct ProcessSolMultiSigStream{
+//     pub start_time: u64,
+//     pub end_time: u64,
+//     pub amount: u64,
+//     whitelist_v1:Multisig
+// }
 pub enum TokenInstruction {
     ProcessSolStream(ProcessSolStream),
     ProcessSolWithdrawStream(ProcessSolWithdrawStream),
@@ -90,6 +90,7 @@ pub enum TokenInstruction {
     Signed_by{
         whitelist_v2:WhiteList
     },
+    ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig}
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -197,15 +198,9 @@ impl TokenInstruction {
             19 =>{
                 Self::Signed_by{whitelist_v2:WhiteList::try_from_slice(rest)?}
             }
-            // 19 => {
-            //     let (start_time, rest) = rest.split_at(8);
-            //     let (end_time, rest) = rest.split_at(8);
-            //     let (amount, rest) = rest.split_at(8);
-            //     let start_time = start_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-            //     let end_time = end_time.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-            //     let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
-            //     Self::ProcessSolMultiSigStream(ProcessSolMultiSigStream{start_time,end_time,amount,})
-            // }
+            20 => {
+                Self::ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig::try_from_slice(rest)?}
+            }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }

@@ -1030,7 +1030,7 @@ impl Processor {
         Ok(())
     }
     /// Function to initilize a solana
-    pub fn process_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
+    pub fn process_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo], data: Escrow_multisig) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
@@ -1045,8 +1045,8 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        if now > end_time{
-            msg!("End time is already passed Now:{} End_time:{}",now,end_time);
+        if now > data.end_time{
+            msg!("End time is already passed Now:{} End_time:{}",now,data.end_time);
             return Err(TokenError::TimeEnd.into());
         }
 
@@ -1078,7 +1078,7 @@ impl Processor {
             )?;
         }
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount += amount;
+        withdraw_state.amount += data.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
 
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
@@ -1099,13 +1099,13 @@ impl Processor {
             fees.fee_calculator.lamports_per_signature * 2,
         )?;
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
-        escrow.start_time = start_time;
-        escrow.end_time = end_time;
+        escrow.start_time = data.start_time;
+        escrow.end_time = data.end_time;
         escrow.paused = 1;
         escrow.withdraw_limit = 0;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
-        escrow.amount = amount;
+        escrow.amount = data.amount;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
@@ -1414,6 +1414,10 @@ impl Processor {
             TokenInstruction::Signed_by{whitelist_v2} => {
                 msg!("Instruction: Creating MultiSig");
                 Self::process_sign_stream(program_id,accounts,whitelist_v2) 
+            }
+            TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
+                msg!("Instruction: Creating MultiSig");
+                Self::process_sol_stream_multisig(program_id,accounts,whitelist_v3) 
             }
         }
     }
