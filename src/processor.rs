@@ -1113,14 +1113,29 @@ impl Processor {
     fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
-        let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
-        let withdraw_data = next_account_info(account_info_iter)?; // pda data storage
-        let system_program = next_account_info(account_info_iter)?; // system program
+        let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
+
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != signed_by.address {
+                return Err(ProgramError::MissingRequiredSignature); 
+            }
+        }
         let mut save_owners = Escrow_multisig::from_account(pda_data)?;
+        for i in 0..save_owners.signed_by.len(){
+            if save_owners.signed_by[i].address == signed_by.address {
+                return Err(TokenError::PublicKeyMismatch.into()); 
+            }
+        }
         save_owners.signed_by.push(signed_by);
-        // let mut test = vec::(WhiteList{ address: *source_account_info.key, counter: 0 })?
-        // test.push(save_owners.signed_by);
+        if  save_owners.signed_by.len() <= multisig_check.m.into() {
+            save_owners.paused = 0;
+        }
+        multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
