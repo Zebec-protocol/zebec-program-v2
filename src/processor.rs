@@ -26,7 +26,8 @@ use crate::{
         ProcessWithdrawToken,
         ProcessWithdrawSol,
         ProcessSwapSol,
-        ProcessSwapToken
+        ProcessSwapToken,
+        ProcessSolWithdrawStreamMultisig
     },
     state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,Escrow_multisig},
     error::TokenError,
@@ -1301,6 +1302,204 @@ impl Processor {
         }
         Ok(())
     }
+    fn process_sol_withdraw_stream_multisig(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
+        let dest_account_info = next_account_info(account_info_iter)?; // stream receiver
+        let pda = next_account_info(account_info_iter)?; // locked fund
+        let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
+        let system_program = next_account_info(account_info_iter)?; // system program id 
+
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
+        if pda_data.data_is_empty(){
+            return Err(ProgramError::UninitializedAccount);
+        }
+        let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        let now = Clock::get()?.unix_timestamp as u64;
+        if now <= escrow.start_time {
+            return Err(TokenError::StreamNotStarted.into());
+        }
+        // Recipient can only withdraw the money that is already streamed. 
+        let mut allowed_amt = escrow.allowed_amt(now);
+        if now >= escrow.end_time {
+            allowed_amt = escrow.amount;
+        }
+        msg!("You can withdraw {}",allowed_amt);
+        if !dest_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        if *dest_account_info.key != escrow.recipient {
+            return Err(TokenError::EscrowMismatch.into());
+        }
+        // Checking if amount is greater than allowed amount
+        if amount>allowed_amt {
+            return Err(ProgramError::InsufficientFunds);
+        }
+        // Checking if paused stream is greater than withdraw limit
+        if escrow.paused == 1 && amount > escrow.withdraw_limit {
+            return Err(ProgramError::InsufficientFunds);
+        }
+        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+            source_account_info.key,
+            program_id,
+        );
+        let pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        create_transfer(
+            pda,
+            dest_account_info,
+            system_program,
+            amount,
+            pda_signer_seeds
+        )?;
+        if escrow.paused == 1{
+            msg!("{}{}",escrow.withdraw_limit,amount);
+            escrow.withdraw_limit -= amount;
+        }
+        escrow.amount -=amount;
+        // Closing account to send rent to sender
+        if escrow.amount == 0 { 
+            let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
+        }
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount -= amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        Ok(())
+    }
+     /// Function to cancel solana streaming
+     fn process_cancel_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo], data: Escrow_multisig) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda = next_account_info(account_info_iter)?; // locked fund
+        let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
+        let system_program = next_account_info(account_info_iter)?; // system program id 
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
+        if pda_data.data_is_empty(){
+            return Err(ProgramError::UninitializedAccount);
+        }
+        let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        let now = Clock::get()?.unix_timestamp as u64;
+        // Amount that recipient should receive.  
+        let mut allowed_amt = escrow.allowed_amt(now);
+        if now >= escrow.end_time {
+            msg!("Stream already completed");
+            return Err(TokenError::StreamNotStarted.into());
+        }
+        if now < escrow.start_time {
+            allowed_amt = escrow.amount;
+        }
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::OwnerMismatch.into());
+        }
+        let dest_account_amount = escrow.amount-allowed_amt;
+        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+            source_account_info.key,
+            program_id,
+        );
+        let pda_signer_seeds: &[&[_]] = &[
+            &source_account_info.key.to_bytes(),
+            &[bump_seed],
+        ];
+        // Sending streamed payment to receiver 
+        create_transfer(
+            pda,
+            dest_account_info,
+            system_program,
+            dest_account_amount,
+            pda_signer_seeds
+        )?;
+        let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount += escrow.amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
+        // Closing account to send rent to sender
+        let dest_starting_lamports = source_account_info.lamports();
+        **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+            .checked_add(pda_data.lamports())
+            .ok_or(TokenError::Overflow)?;
+
+        **pda_data.lamports.borrow_mut() = 0;
+        escrow.amount = 0;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    //Function to pause solana stream
+    fn process_pause_sol_stream_multisig(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?;
+
+        let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        let now = Clock::get()?.unix_timestamp as u64;
+        let allowed_amt = escrow.allowed_amt(now);
+        if now >= escrow.end_time {
+            msg!("End time is already passed");
+            return Err(TokenError::TimeEnd.into());
+        }
+        // Both sender and receiver can pause / resume stream
+        if !source_account_info.is_signer && !dest_account_info.is_signer{ 
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+
+        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { 
+            return Err(TokenError::EscrowMismatch.into());
+        }
+        if escrow.paused ==1{
+            return Err(TokenError::AlreadyPaused.into());
+        }
+        escrow.paused = 1;
+        escrow.withdraw_limit = allowed_amt;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    //Function to resume solana stream
+    fn process_resume_sol_stream_multisig(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;
+        let dest_account_info = next_account_info(account_info_iter)?;
+        let pda_data = next_account_info(account_info_iter)?;
+
+        let now = Clock::get()?.unix_timestamp as u64;
+        let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        // Both sender and receiver can pause / resume stream
+        if !source_account_info.is_signer && !dest_account_info.is_signer{ 
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient {
+            return Err(TokenError::EscrowMismatch.into());
+        }
+        if escrow.paused ==0{
+            return Err(TokenError::AlreadyResumed.into());
+        }
+        escrow.paused = 0;
+        escrow.start_time =  now;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        Ok(())
+    }
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
@@ -1419,6 +1618,10 @@ impl Processor {
                 msg!("Instruction: Creating MultiSig");
                 Self::process_sol_stream_multisig(program_id,accounts,whitelist_v3) 
             }
+            TokenInstruction::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{
+                amount}) =>{
+                    Self::process_sol_withdraw_stream_multisig(program_id,accounts,amount) 
+                }
         }
     }
 }
