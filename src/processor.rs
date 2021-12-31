@@ -27,7 +27,7 @@ use crate::{
         ProcessWithdrawSol,
         ProcessSwapSol,
         ProcessSwapToken,
-        ProcessSolWithdrawStreamMultisig
+        ProcessSolWithdrawStreamMultisig,
     },
     state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,Escrow_multisig},
     error::TokenError,
@@ -45,8 +45,7 @@ use crate::{
     PREFIX_TOKEN
 };
 use spl_associated_token_account::get_associated_token_address;
-use std::iter::Extend;
-use std::vec::Vec;
+
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
@@ -1082,13 +1081,13 @@ impl Processor {
         withdraw_state.amount += data.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
 
-        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>());
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
         let fees = Fees::get()?;
         create_pda_account( 
             source_account_info,
             transfer_amount,
-            std::mem::size_of::<Escrow>(),
+            std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>(),
             program_id,
             system_program,
             pda_data
@@ -1107,6 +1106,7 @@ impl Processor {
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = data.amount;
+        escrow.signed_by = data.signed_by;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
@@ -1143,8 +1143,8 @@ impl Processor {
     fn process_swap_sol(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
-        let pda = next_account_info(account_info_iter)?;
-        let multi_sig_pda = next_account_info(account_info_iter)?;
+        let pda = next_account_info(account_info_iter)?; // master pda 
+        let multi_sig_pda = next_account_info(account_info_iter)?; // multisig vault
         let multi_sig_pda_data = next_account_info(account_info_iter)?;
         let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
         let system_program = next_account_info(account_info_iter)?;
@@ -1615,7 +1615,7 @@ impl Processor {
                 Self::process_sign_stream(program_id,accounts,whitelist_v2) 
             }
             TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
-                msg!("Instruction: Creating MultiSig");
+                msg!("Instruction: Streaming MultiSig");
                 Self::process_sol_stream_multisig(program_id,accounts,whitelist_v3) 
             }
             TokenInstruction::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{

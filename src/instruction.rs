@@ -1,8 +1,6 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
-    msg,
-    pubkey::Pubkey,
 };
 use {borsh::{BorshDeserialize}};
 
