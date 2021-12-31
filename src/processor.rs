@@ -1116,7 +1116,6 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
-
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -1128,7 +1127,7 @@ impl Processor {
         }
         let mut save_owners = Escrow_multisig::from_account(pda_data)?;
         for i in 0..save_owners.signed_by.len(){
-            if save_owners.signed_by[i].address == signed_by.address {
+            if save_owners.signed_by[i].address != signed_by.address {
                 return Err(TokenError::PublicKeyMismatch.into()); 
             }
         }
@@ -1136,6 +1135,7 @@ impl Processor {
         if  save_owners.signed_by.len() <= multisig_check.m.into() {
             save_owners.paused = 0;
         }
+        msg!("{:?}",save_owners);
         multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
@@ -1611,7 +1611,7 @@ impl Processor {
                 Self::process_swap_token(program_id,accounts,amount) 
             }
             TokenInstruction::Signed_by{whitelist_v2} => {
-                msg!("Instruction: Creating MultiSig");
+                msg!("Instruction: Signning multisig");
                 Self::process_sign_stream(program_id,accounts,whitelist_v2) 
             }
             TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
