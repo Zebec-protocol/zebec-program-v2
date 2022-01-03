@@ -1308,6 +1308,7 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?; // stream receiver
         let pda = next_account_info(account_info_iter)?; // locked fund
         let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
 
@@ -1345,12 +1346,18 @@ impl Processor {
         if escrow.paused == 1 && amount > escrow.withdraw_limit {
             return Err(ProgramError::InsufficientFunds);
         }
-        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+        // let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+        //     source_account_info.key,
+        //     program_id,
+        // );
+        let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
             source_account_info.key,
+            multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
             &source_account_info.key.to_bytes(),
+            &multisig_pda_data.key.to_bytes(),
             &[bump_seed],
         ];
         create_transfer(
