@@ -1025,7 +1025,7 @@ impl Processor {
         msg!("Escrow Created - {}",account_address);
         let mut save_owners = Multisig::from_account(pda)?;
         save_owners.signers = signers.signers;
-        save_owners.m = 8;
+        save_owners.m = signers.m;
         save_owners.serialize(&mut *pda.data.borrow_mut())?;
         Ok(())
     }
@@ -1111,7 +1111,7 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_sign_stream(accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
@@ -1132,7 +1132,7 @@ impl Processor {
             }
         }
         save_owners.signed_by.push(signed_by);
-        if  save_owners.signed_by.len() <= multisig_check.m.into() {
+        if  save_owners.signed_by.len() >= multisig_check.m.into() {
             save_owners.paused = 0;
         }
         msg!("{:?}",save_owners);
@@ -1157,7 +1157,7 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
-        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             source_account_info.key,
             multi_sig_pda_data.key,
             program_id,
@@ -1233,7 +1233,7 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
-        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             source_account_info.key,
             multi_sig_pda_data.key,
             program_id,
@@ -1306,12 +1306,12 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
         let dest_account_info = next_account_info(account_info_iter)?; // stream receiver
-        let pda = next_account_info(account_info_iter)?; // locked fund
+        let pda = next_account_info(account_info_iter)?; // multisig vault pda
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
-
+        msg!("{:?}",pda);
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIX,
             source_account_info.key,
@@ -1346,10 +1346,6 @@ impl Processor {
         if escrow.paused == 1 && amount > escrow.withdraw_limit {
             return Err(ProgramError::InsufficientFunds);
         }
-        // let (_account_address, bump_seed) = get_master_address_and_bump_seed(
-        //     source_account_info.key,
-        //     program_id,
-        // );
         let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
             source_account_info.key,
             multisig_pda_data.key,
@@ -1387,12 +1383,13 @@ impl Processor {
         Ok(())
     }
      /// Function to cancel solana streaming
-     fn process_cancel_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo], data: Escrow_multisig) -> ProgramResult {
+     fn process_cancel_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda = next_account_info(account_info_iter)?; // locked fund
         let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
         if !source_account_info.is_signer {
@@ -1422,12 +1419,14 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         let dest_account_amount = escrow.amount-allowed_amt;
-        let (_account_address, bump_seed) = get_master_address_and_bump_seed(
+        let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
             source_account_info.key,
+            multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
             &source_account_info.key.to_bytes(),
+            &multisig_pda_data.key.to_bytes(),
             &[bump_seed],
         ];
         // Sending streamed payment to receiver 
@@ -1617,9 +1616,9 @@ impl Processor {
                 msg!("Instruction: Swapping token");
                 Self::process_swap_token(program_id,accounts,amount) 
             }
-            TokenInstruction::Signed_by{whitelist_v2} => {
+            TokenInstruction::SignedBy{whitelist_v2} => {
                 msg!("Instruction: Signning multisig");
-                Self::process_sign_stream(program_id,accounts,whitelist_v2) 
+                Self::process_sign_stream(accounts,whitelist_v2) 
             }
             TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
                 msg!("Instruction: Streaming MultiSig");
@@ -1629,6 +1628,18 @@ impl Processor {
                 amount}) =>{
                     Self::process_sol_withdraw_stream_multisig(program_id,accounts,amount) 
                 }
+            TokenInstruction::ProcessSolCancelStreamMultisig => {
+                msg!("Instruction: Multisig Sol Cancel");
+                Self::process_cancel_sol_stream_multisig(program_id,accounts)
+            }
+            TokenInstruction::ProcessPauseMultisigStream => {
+                msg!("Instruction: Stream pause");
+                Self::process_pause_sol_stream_multisig(accounts)
+            }
+            TokenInstruction::ProcessResumeMultisigStream=> {
+                msg!("Instruction: Stream Resume ");
+                Self::process_resume_sol_stream_multisig(accounts)
+            }
         }
     }
 }

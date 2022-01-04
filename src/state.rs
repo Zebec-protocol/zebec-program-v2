@@ -63,16 +63,8 @@ pub struct TokenWithdraw{
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
 pub struct Multisig {
-    /// Number of signers required
-    /// Number of valid signers
-    // pub n: u8,
-    /// Is `true` if this structure has been initialized
-    // pub is_initialized: bool,
-    /// Signer public keys
     pub signers: Vec<WhiteList>,
     pub m: u8,
-    // PDA save
-    // pub pda: Pubkey
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]

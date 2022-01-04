@@ -82,11 +82,14 @@ pub enum TokenInstruction {
     },
     ProcessSwapSol(ProcessSwapSol),
     ProcessSwapToken(ProcessSwapToken),
-    Signed_by{
+    SignedBy{
         whitelist_v2:WhiteList
     },
     ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig},
-    ProcessSolWithdrawStreamMultisig(ProcessSolWithdrawStreamMultisig)
+    ProcessSolWithdrawStreamMultisig(ProcessSolWithdrawStreamMultisig),
+    ProcessSolCancelStreamMultisig,
+    ProcessPauseMultisigStream,
+    ProcessResumeMultisigStream,
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -192,7 +195,7 @@ impl TokenInstruction {
                 Self::ProcessSwapToken(ProcessSwapToken{amount})
             },
             19 =>{
-                Self::Signed_by{whitelist_v2:WhiteList::try_from_slice(rest)?}
+                Self::SignedBy{whitelist_v2:WhiteList::try_from_slice(rest)?}
             }
             20 => {
                 Self::ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig::try_from_slice(rest)?}
@@ -202,6 +205,16 @@ impl TokenInstruction {
                 let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
                 Self::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{amount})
             }
+            22 => {
+                Self:: ProcessSolCancelStreamMultisig
+            }
+            23 => {
+                Self:: ProcessPauseMultisigStream
+            }
+            24 => {
+                Self:: ProcessResumeMultisigStream
+            }
+
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }
