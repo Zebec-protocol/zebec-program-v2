@@ -96,6 +96,32 @@ pub struct Escrow_multisig{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub signed_by: Vec<WhiteList>,
+    pub multisig_safe: Pubkey
+}
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct TokenEscrowMultisig{
+    pub start_time: u64,
+    pub end_time: u64,
+    pub paused: u64,
+    pub withdraw_limit: u64,
+    pub amount: u64,
+    pub sender:   Pubkey,
+    pub recipient: Pubkey,
+    pub token_mint: Pubkey,
+    pub signed_by: Vec<WhiteList>,
+}
+impl TokenEscrowMultisig {
+    pub fn from_account(account:&AccountInfo)-> Result<TokenEscrowMultisig, ProgramError> {
+        let md: TokenEscrowMultisig =try_from_slice_unchecked(&account.data.borrow_mut())?;
+        Ok(md)
+    }
+
+    pub fn allowed_amt(&self, now: u64) -> u64 {
+        (
+        ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
+        ) as u64 
+    }
 }
 impl Escrow_multisig {
     pub fn from_account(account:&AccountInfo)-> Result<Escrow_multisig, ProgramError> {

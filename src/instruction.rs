@@ -90,6 +90,7 @@ pub enum TokenInstruction {
     ProcessSolCancelStreamMultisig,
     ProcessPauseMultisigStream,
     ProcessResumeMultisigStream,
+    ProcessRejectMultisigStream
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -213,6 +214,9 @@ impl TokenInstruction {
             }
             24 => {
                 Self:: ProcessResumeMultisigStream
+            }
+            25 => {
+                Self:: ProcessRejectMultisigStream
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),
