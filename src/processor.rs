@@ -1055,6 +1055,7 @@ impl Processor {
         let mut save_owners = Multisig::from_account(pda_data)?;
         save_owners.signers = signers.signers;
         save_owners.m = signers.m;
+        save_owners.multisig_safe = multisig_safe;
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
@@ -1063,7 +1064,7 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let multisig_safe = next_account_info(account_info_iter)?; 
+        let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
         let withdraw_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; // system program
@@ -1084,29 +1085,22 @@ impl Processor {
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
         }
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIXMULTISIG,
-            multisig_safe.key,
+            &multisig_check.multisig_safe,
             program_id,
         );
-        // let withdraw_data_signer_seeds: &[&[_]] = &[
-        //     PREFIXMULTISIG.as_bytes(),
-        //     &source_account_info.key.to_bytes(),
-        //     &[bump_seed],
-        // ];
         assert_keys_equal(*withdraw_data.key,account_address )?;
-        // if withdraw_data.data_is_empty(){
-        //     let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Withdraw>());
-        //     create_pda_account_signed(
-        //         source_account_info,
-        //         transfer_amount,
-        //         std::mem::size_of::<Withdraw>(),
-        //         program_id,
-        //         system_program,
-        //         withdraw_data,
-        //         withdraw_data_signer_seeds
-        //     )?;
-        // }
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
         withdraw_state.amount += data.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
@@ -1137,9 +1131,10 @@ impl Processor {
         escrow.recipient = *dest_account_info.key;
         escrow.amount = data.amount;
         escrow.signed_by = data.signed_by;
-        escrow.multisig_safe = *multisig_safe.key;
+        escrow.multisig_safe = multisig_check.multisig_safe;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
         Ok(())
     }
     fn process_sign_stream(accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
@@ -1194,6 +1189,9 @@ impl Processor {
             if multisig_check.signers[i].address != *source_account_info.key {
                 k += 1;
             }
+        }
+        if multisig_check.multisig_safe !=escrow.multisig_safe{
+            return Err(TokenError::PublicKeyMismatch.into());
         }
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
@@ -1392,6 +1390,9 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        if escrow.multisig_safe == *pda.key{
+            return Err(TokenError::EscrowMismatch.into());
+        }
         let now = Clock::get()?.unix_timestamp as u64;
         if now <= escrow.start_time {
             return Err(TokenError::StreamNotStarted.into());
