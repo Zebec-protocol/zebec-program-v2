@@ -44,7 +44,8 @@ use crate::{
     },
     PREFIX,
     PREFIXMULTISIG,
-    PREFIX_TOKEN
+    PREFIX_TOKEN,
+    PREFIXMULTISIGSAFE
 };
 use spl_associated_token_account::get_associated_token_address;
 
@@ -1012,8 +1013,8 @@ impl Processor {
 
         let rent = Rent::get()?; 
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>()+std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>());
-        let (multisig_safe, _bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+        let (multisig_safe, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+            PREFIXMULTISIGSAFE,
             pda_data.key,
             program_id,
         );
@@ -1045,13 +1046,8 @@ impl Processor {
             system_program,
             pda_data,
         )?;
-        let (account_address, _bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
-            pda_data.key,
-            program_id,
-        );
         msg!("Creating Escrow for multisig");
-        msg!("Escrow Created - {}",account_address);
+        msg!("Escrow Created - {}",multisig_safe);
         let mut save_owners = Multisig::from_account(pda_data)?;
         save_owners.signers = signers.signers;
         save_owners.m = signers.m;
@@ -1226,7 +1222,7 @@ impl Processor {
             &[bump_seed],
         ];
         let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+            PREFIXMULTISIGSAFE,
             multi_sig_pda_data.key,
             program_id,
         );
@@ -1301,8 +1297,8 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
-        let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+            PREFIXMULTISIGSAFE,
             multi_sig_pda_data.key,
             program_id,
         );
@@ -1417,15 +1413,15 @@ impl Processor {
         if escrow.paused == 1 && amount > escrow.withdraw_limit {
             return Err(ProgramError::InsufficientFunds);
         }
-        let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+            PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
+            &PREFIXMULTISIGSAFE.as_bytes(),
             &multisig_pda_data.key.to_bytes(),
-            &[bump_seed],
+            &[bump_seed_multisig],
         ];
         create_transfer(
             pda,
@@ -1472,7 +1468,7 @@ impl Processor {
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIXMULTISIG,
-            &escrow.sender,
+            &pda.key,
             program_id,
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
@@ -1496,19 +1492,24 @@ impl Processor {
         if now < escrow.start_time {
             allowed_amt = escrow.amount;
         }
-        if *source_account_info.key != escrow.sender {
+        // if *source_account_info.key != escrow.sender {
+        //     return Err(TokenError::OwnerMismatch.into());
+        // }
+        msg!("escrow.multisig_safe: {} *pda.key: {}",escrow.multisig_safe,*pda.key);
+
+        if escrow.multisig_safe != *pda.key {
             return Err(TokenError::OwnerMismatch.into());
         }
         let dest_account_amount = escrow.amount-allowed_amt;
-        let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+            PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
+            &PREFIXMULTISIGSAFE.as_bytes(),
             &multisig_pda_data.key.to_bytes(),
-            &[bump_seed],
+            &[bump_seed_multisig],
         ];
         // Sending streamed payment to receiver 
         create_transfer(
@@ -1766,12 +1767,12 @@ impl Processor {
         }
 
         let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+            PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
+            &PREFIXMULTISIGSAFE.as_bytes(),
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed],
         ];
@@ -1886,12 +1887,12 @@ impl Processor {
 
         // Sending pending streaming payment to sender 
         let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
-            source_account_info.key,
+            &PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
         );
         let pda_signer_seeds: &[&[_]] = &[
-            &source_account_info.key.to_bytes(),
+            &PREFIXMULTISIGSAFE.as_bytes(),
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed],
         ];
