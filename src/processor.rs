@@ -1249,7 +1249,8 @@ impl Processor {
         else{
             let allowed_amt = pda.lamports() - amount;
             let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-            if allowed_amt < withdraw_state.amount {
+            msg!("Your streaming amount is: {}",withdraw_state.amount);
+            if allowed_amt > withdraw_state.amount {
                 return Err(TokenError::StreamedAmt.into()); 
             }
             invoke_signed(
@@ -1540,8 +1541,22 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
 
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
+        if multisig_check.multisig_safe != escrow.multisig_safe{
+            return Err(TokenError::OwnerMismatch.into());
+        }
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
@@ -1553,9 +1568,9 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
 
-        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { 
-            return Err(TokenError::EscrowMismatch.into());
-        }
+        // if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { 
+        //     return Err(TokenError::EscrowMismatch.into());
+        // }
         if escrow.paused ==1{
             return Err(TokenError::AlreadyPaused.into());
         }
@@ -1570,7 +1585,18 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
 
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
         // Both sender and receiver can pause / resume stream
