@@ -6,7 +6,7 @@ use {borsh::{BorshDeserialize}};
 
 use crate::{
     error::TokenError,
-    state::{WhiteList,Multisig,Escrow_multisig}
+    state::{WhiteList,Multisig,Escrow_multisig,TokenEscrowMultisig}
 };
 use std::convert::TryInto;
 
@@ -60,6 +60,9 @@ pub struct ProcessSolWithdrawStreamMultisig{
     /// Amount of fund
     pub amount: u64,
 }
+pub struct ProcessTokenWithdrawStreamMultisig{
+    pub amount: u64,
+}
 pub enum TokenInstruction {
     ProcessSolStream(ProcessSolStream),
     ProcessSolWithdrawStream(ProcessSolWithdrawStream),
@@ -90,7 +93,16 @@ pub enum TokenInstruction {
     ProcessSolCancelStreamMultisig,
     ProcessPauseMultisigStream,
     ProcessResumeMultisigStream,
-    ProcessRejectMultisigStream
+    ProcessRejectMultisigStream,
+    ProcessSolTokenMultiSigStream{whitelist_v3:TokenEscrowMultisig},
+    ProcessTokenWithdrawStreamMultisig(ProcessTokenWithdrawStreamMultisig),
+    ProcessTokenCancelStreamMultisig,
+    ProcessPauseTokenMultisigStream,
+    ProcessResumeTokenMultisigStream,
+    ProcessRejectTokenMultisigStream,
+    SignedByToken{
+        whitelist_v2:WhiteList
+    }
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -217,6 +229,29 @@ impl TokenInstruction {
             }
             25 => {
                 Self:: ProcessRejectMultisigStream
+            }
+            26 => {
+                Self::ProcessSolTokenMultiSigStream{whitelist_v3:TokenEscrowMultisig::try_from_slice(rest)?}
+            }
+            27 => {
+                let (amount, _rest) = rest.split_at(8);
+                let amount = amount.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;
+                Self::ProcessTokenWithdrawStreamMultisig (ProcessTokenWithdrawStreamMultisig{amount})
+            }
+            28 => {
+                Self:: ProcessTokenCancelStreamMultisig
+            }
+            29 => {
+                Self:: ProcessPauseTokenMultisigStream
+            }
+            30 => {
+                Self:: ProcessResumeTokenMultisigStream
+            }
+            31 => {
+                Self:: ProcessRejectTokenMultisigStream
+            }
+            32 =>{
+                Self::SignedByToken{whitelist_v2:WhiteList::try_from_slice(rest)?}
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),

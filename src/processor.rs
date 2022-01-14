@@ -29,6 +29,7 @@ use crate::{
         ProcessSwapSol,
         ProcessSwapToken,
         ProcessSolWithdrawStreamMultisig,
+        ProcessTokenWithdrawStreamMultisig
     },
     state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,TokenEscrowMultisig,Escrow_multisig},
     error::TokenError,
@@ -1195,7 +1196,7 @@ impl Processor {
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
         withdraw_state.amount -= escrow.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
-        escrow.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         let dest_starting_lamports = initiator_account_info.lamports();
             **initiator_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -1376,7 +1377,7 @@ impl Processor {
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
-        msg!("{:?}",pda);
+        // msg!("{:?}",pda);
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIXMULTISIG,
             pda.key,
@@ -1387,7 +1388,7 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let mut escrow = Escrow_multisig::from_account(pda_data)?;
-        if escrow.multisig_safe == *pda.key{
+        if escrow.multisig_safe != *pda.key{
             return Err(TokenError::EscrowMismatch.into());
         }
         let now = Clock::get()?.unix_timestamp as u64;
@@ -2168,8 +2169,36 @@ impl Processor {
                 Self::process_resume_sol_stream_multisig(accounts)
             }
             TokenInstruction::ProcessRejectMultisigStream=> {
-                msg!("Instruction: Stream Resume ");
+                msg!("Instruction: Rejecting stream ");
                 Self::process_reject_sol_stream_multisig(accounts)
+            }
+            TokenInstruction::ProcessSolTokenMultiSigStream{whitelist_v3}=>{
+                msg!("Instruction: Streaming Token MultiSig");
+                Self::process_token_multisig_stream(program_id,accounts,whitelist_v3) 
+            }
+            TokenInstruction::ProcessTokenWithdrawStreamMultisig (ProcessTokenWithdrawStreamMultisig{
+                amount}) =>{
+                    Self::process_token_withdraw_multisig_stream(program_id,accounts,amount) 
+                }
+            TokenInstruction::ProcessTokenCancelStreamMultisig => {
+                msg!("Instruction: Multisig Sol Cancel");
+                Self::process_token_cancel_multisig_stream(program_id,accounts)
+            }
+            TokenInstruction::ProcessPauseTokenMultisigStream => {
+                msg!("Instruction: Stream pause");
+                Self::process_pause_token_multisig_stream(accounts)
+            }
+            TokenInstruction::ProcessResumeTokenMultisigStream=> {
+                msg!("Instruction: Stream Resume ");
+                Self::process_resume_token_multisig_stream(accounts)
+            }
+            TokenInstruction::ProcessRejectTokenMultisigStream=> {
+                msg!("Instruction: Rejecting stream ");
+                Self::process_reject_sol_stream_multisig(accounts)
+            }
+            TokenInstruction::SignedByToken{whitelist_v2} => {
+                msg!("Instruction: Signning multisig");
+                Self::process_sign_token_stream(accounts,whitelist_v2) 
             }
         }
     }
