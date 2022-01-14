@@ -94,14 +94,14 @@ pub enum TokenInstruction {
     ProcessPauseMultisigStream,
     ProcessResumeMultisigStream,
     ProcessRejectMultisigStream,
-    ProcessSolTokenMultiSigStream{whitelist_v3:TokenEscrowMultisig},
+    ProcessSolTokenMultiSigStream{whitelist_v4:TokenEscrowMultisig},
     ProcessTokenWithdrawStreamMultisig(ProcessTokenWithdrawStreamMultisig),
     ProcessTokenCancelStreamMultisig,
     ProcessPauseTokenMultisigStream,
     ProcessResumeTokenMultisigStream,
     ProcessRejectTokenMultisigStream,
     SignedByToken{
-        whitelist_v2:WhiteList
+        whitelist_v4:WhiteList
     }
 }
 impl TokenInstruction {
@@ -231,7 +231,7 @@ impl TokenInstruction {
                 Self:: ProcessRejectMultisigStream
             }
             26 => {
-                Self::ProcessSolTokenMultiSigStream{whitelist_v3:TokenEscrowMultisig::try_from_slice(rest)?}
+                Self::ProcessSolTokenMultiSigStream{whitelist_v4:TokenEscrowMultisig::try_from_slice(rest)?}
             }
             27 => {
                 let (amount, _rest) = rest.split_at(8);
@@ -251,7 +251,7 @@ impl TokenInstruction {
                 Self:: ProcessRejectTokenMultisigStream
             }
             32 =>{
-                Self::SignedByToken{whitelist_v2:WhiteList::try_from_slice(rest)?}
+                Self::SignedByToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),

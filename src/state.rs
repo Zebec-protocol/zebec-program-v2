@@ -111,6 +111,7 @@ pub struct TokenEscrowMultisig{
     pub recipient: Pubkey,
     pub token_mint: Pubkey,
     pub signed_by: Vec<WhiteList>,
+    pub multisig_safe: Pubkey
 }
 impl TokenEscrowMultisig {
     pub fn from_account(account:&AccountInfo)-> Result<TokenEscrowMultisig, ProgramError> {

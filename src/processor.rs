@@ -1288,7 +1288,10 @@ impl Processor {
         let associated_token_address = next_account_info(account_info_iter)?; // sender associated token address
         let pda = next_account_info(account_info_iter)?; // pda
         let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
+        let multisig_pda_associated_info = next_account_info(account_info_iter)?; // Associated token of multisig pda
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of multisig pda
+        let rent_info = next_account_info(account_info_iter)?; // rent address
+        let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program 
 
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
@@ -1310,16 +1313,35 @@ impl Processor {
         assert_keys_equal(source_associated_token, *associated_token_address.key)?;
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(account_address, *pda.key)?;
-        assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
+        assert_keys_equal(pda_associated_token, *multisig_pda_associated_info.key)?;
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        if multisig_pda_associated_info.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    source_account_info.key,
+                    multi_sig_pda.key,
+                    token_mint_info.key,
+                ),&[
+                    source_account_info.clone(),
+                    multisig_pda_associated_info.clone(),
+                    multi_sig_pda.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
+        }
+        msg!("1");
         if withdraw_data.data_is_empty(){
             invoke_signed(
                 &spl_token::instruction::transfer(
                     token_program_info.key,
                     pda_associated_info.key,
-                    associated_token_address.key,
+                    multisig_pda_associated_info.key,
                     pda.key,
                     &[pda.key],
                     amount
@@ -1327,7 +1349,7 @@ impl Processor {
                 &[
                     token_program_info.clone(),
                     pda_associated_info.clone(),
-                    associated_token_address.clone(),
+                    multisig_pda_associated_info.clone(),
                     pda.clone(),
                     system_program.clone()
                 ],&[&pda_signer_seeds],
@@ -1343,7 +1365,7 @@ impl Processor {
                 &spl_token::instruction::transfer(
                     token_program_info.key,
                     pda_associated_info.key,
-                    associated_token_address.key,
+                    multisig_pda_associated_info.key,
                     pda.key,
                     &[pda.key],
                     amount
@@ -1351,7 +1373,7 @@ impl Processor {
                 &[
                     token_program_info.clone(),
                     pda_associated_info.clone(),
-                    associated_token_address.clone(),
+                    multisig_pda_associated_info.clone(),
                     pda.clone(),
                     system_program.clone()
                 ],&[&pda_signer_seeds],
@@ -1621,11 +1643,11 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
+        let pda_data_multisig = next_account_info(account_info_iter)?; // Program pda to store data
         let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let token_program_info = next_account_info(account_info_iter)?; // TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         let system_program = next_account_info(account_info_iter)?; // system address
         let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
-
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
         if token_program_info.key != &spl_token::id() {
@@ -1641,16 +1663,17 @@ impl Processor {
             return Err(TokenError::TimeEnd.into());
         }
         let space_size = std::mem::size_of::<TokenEscrow>();
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
 
         let (account_address, bump_seed) = get_withdraw_data_and_bump_seed(
-            PREFIX_TOKEN,
-            source_account_info.key,
+            PREFIXMULTISIG,
+            &multisig_check.multisig_safe,
             program_id,
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
         let withdraw_data_signer_seeds: &[&[_]] = &[
-            PREFIX_TOKEN.as_bytes(),
-            &source_account_info.key.to_bytes(),
+            PREFIXMULTISIG.as_bytes(),
+            &multisig_check.multisig_safe.to_bytes(),
             &[bump_seed],
         ];
         if withdraw_data.data_is_empty(){
@@ -1672,12 +1695,12 @@ impl Processor {
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
         }
-        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow>());
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<TokenEscrowMultisig>());
 
         create_pda_account( 
             source_account_info,
-            transfer_amount,
-            space_size,
+            transfer_amount+transfer_amount+transfer_amount+transfer_amount,
+            std::mem::size_of::<TokenEscrowMultisig>()+std::mem::size_of::<TokenEscrowMultisig>()+std::mem::size_of::<TokenEscrowMultisig>()+std::mem::size_of::<TokenEscrowMultisig>(),
             program_id,
             system_program,
             pda_data
@@ -1689,6 +1712,7 @@ impl Processor {
             system_program,
             fees.fee_calculator.lamports_per_signature * 2,
         )?;
+
         let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
         escrow.start_time = data.start_time;
         escrow.end_time = data.end_time;
@@ -1712,16 +1736,24 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
             if multisig_check.signers[i].address != signed_by.address {
-                return Err(ProgramError::MissingRequiredSignature); 
+                k += 1;
             }
         }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let mut n = 0; 
         let mut save_owners = TokenEscrowMultisig::from_account(pda_data)?;
         for i in 0..save_owners.signed_by.len(){
-            if save_owners.signed_by[i].address != signed_by.address {
-                return Err(TokenError::PublicKeyMismatch.into()); 
+            if save_owners.signed_by[i].address == signed_by.address {
+                n += 1;
             }
+        }
+        if n > 0{
+            return Err(TokenError::PublicKeyMismatch.into()); 
         }
         save_owners.signed_by.push(signed_by);
         if  save_owners.signed_by.len() >= multisig_check.m.into() {
@@ -1876,11 +1908,25 @@ impl Processor {
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
 
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        // msg!("find program address pda:{}",multisig_check.multisig_safe);
+        // msg!("sol.keypair pda:{}",multisig_pda_data.key);
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
-            PREFIX_TOKEN,
-            source_account_info.key,
+            PREFIXMULTISIG,
+            &multisig_check.multisig_safe,
             program_id,
         );
+        // msg!("withdraw data from backend:{}",account_address);
+        // msg!("withdraw data from frontend:{}",withdraw_data.key);
         assert_keys_equal(*withdraw_data.key,account_address )?;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
@@ -1888,7 +1934,7 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
         let now = Clock::get()?.unix_timestamp as u64;
 
         // Amount that recipient should receive.  
@@ -1905,7 +1951,6 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         let dest_account_amount = escrow.amount-allowed_amt;
-
         assert_keys_equal(*token_mint_info.key, escrow.token_mint)?;
 
         let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,&escrow.token_mint);
@@ -1924,7 +1969,7 @@ impl Processor {
             &[bump_seed],
         ];
 
-        let pda_associated_token = get_associated_token_address(&account_address,&escrow.token_mint);
+        let pda_associated_token = get_associated_token_address(&multisig_check.multisig_safe,&escrow.token_mint);
         assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
 
         if receiver_associated_info.data_is_empty(){
@@ -2172,16 +2217,16 @@ impl Processor {
                 msg!("Instruction: Rejecting stream ");
                 Self::process_reject_sol_stream_multisig(accounts)
             }
-            TokenInstruction::ProcessSolTokenMultiSigStream{whitelist_v3}=>{
+            TokenInstruction::ProcessSolTokenMultiSigStream{whitelist_v4}=>{
                 msg!("Instruction: Streaming Token MultiSig");
-                Self::process_token_multisig_stream(program_id,accounts,whitelist_v3) 
+                Self::process_token_multisig_stream(program_id,accounts,whitelist_v4) 
             }
             TokenInstruction::ProcessTokenWithdrawStreamMultisig (ProcessTokenWithdrawStreamMultisig{
                 amount}) =>{
                     Self::process_token_withdraw_multisig_stream(program_id,accounts,amount) 
                 }
             TokenInstruction::ProcessTokenCancelStreamMultisig => {
-                msg!("Instruction: Multisig Sol Cancel");
+                msg!("Instruction: Multisig Token Cancel");
                 Self::process_token_cancel_multisig_stream(program_id,accounts)
             }
             TokenInstruction::ProcessPauseTokenMultisigStream => {
@@ -2196,9 +2241,9 @@ impl Processor {
                 msg!("Instruction: Rejecting stream ");
                 Self::process_reject_sol_stream_multisig(accounts)
             }
-            TokenInstruction::SignedByToken{whitelist_v2} => {
+            TokenInstruction::SignedByToken{whitelist_v4} => {
                 msg!("Instruction: Signning multisig");
-                Self::process_sign_token_stream(accounts,whitelist_v2) 
+                Self::process_sign_token_stream(accounts,whitelist_v4) 
             }
         }
     }
