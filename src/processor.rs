@@ -1013,8 +1013,9 @@ impl Processor {
         let withdraw_data = next_account_info(account_info)?; // pda data storage
 
         let rent = Rent::get()?; 
-        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>()+std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>());
-        let (multisig_safe, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+
+        let transfer_amount = rent.minimum_balance(std::mem::size_of::<Multisig>()+355);
+        let (multisig_safe, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             pda_data.key,
             program_id,
@@ -1042,7 +1043,7 @@ impl Processor {
         create_pda_account(
             source_account_info,
             transfer_amount,
-            std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>()+std::mem::size_of::<Multisig>()+std::mem::size_of::<WhiteList>(),
+            std::mem::size_of::<Multisig>()+355,
             program_id,
             system_program,
             pda_data,
@@ -1102,13 +1103,13 @@ impl Processor {
         withdraw_state.amount += data.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
 
-        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>());
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Escrow_multisig>()+355);
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
         let fees = Fees::get()?;
         create_pda_account( 
             source_account_info,
             transfer_amount,
-            std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>()+std::mem::size_of::<Escrow_multisig>(),
+            std::mem::size_of::<Escrow_multisig>()+355,
             program_id,
             system_program,
             pda_data
@@ -1302,7 +1303,7 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
-        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multi_sig_pda_data.key,
             program_id,
@@ -1437,7 +1438,7 @@ impl Processor {
         if escrow.paused == 1 && amount > escrow.withdraw_limit {
             return Err(ProgramError::InsufficientFunds);
         }
-        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (_account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
@@ -1525,7 +1526,7 @@ impl Processor {
             return Err(TokenError::OwnerMismatch.into());
         }
         let dest_account_amount = escrow.amount-allowed_amt;
-        let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (_account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
@@ -1591,9 +1592,6 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
 
-        // if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { 
-        //     return Err(TokenError::EscrowMismatch.into());
-        // }
         if escrow.paused ==1{
             return Err(TokenError::AlreadyPaused.into());
         }
@@ -1662,7 +1660,6 @@ impl Processor {
         if now > data.end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        let space_size = std::mem::size_of::<TokenEscrow>();
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
 
         let (account_address, bump_seed) = get_withdraw_data_and_bump_seed(
@@ -1723,6 +1720,7 @@ impl Processor {
         escrow.amount = data.amount;
         escrow.token_mint = *token_mint_info.key;
         escrow.signed_by = data.signed_by;
+        escrow.multisig_safe = multisig_check.multisig_safe;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
@@ -1746,22 +1744,61 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let mut n = 0; 
-        let mut save_owners = TokenEscrowMultisig::from_account(pda_data)?;
-        for i in 0..save_owners.signed_by.len(){
-            if save_owners.signed_by[i].address == signed_by.address {
+        let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        for i in 0..escrow.signed_by.len(){
+            if escrow.signed_by[i].address == signed_by.address {
                 n += 1;
             }
         }
         if n > 0{
             return Err(TokenError::PublicKeyMismatch.into()); 
         }
-        save_owners.signed_by.push(signed_by);
-        if  save_owners.signed_by.len() >= multisig_check.m.into() {
-            save_owners.paused = 0;
+        escrow.signed_by.push(signed_by);
+        if escrow.paused == 0{
+            return Err(TokenError::TimeEnd.into()); 
         }
-        msg!("{:?}",save_owners);
+        if  escrow.signed_by.len() >= multisig_check.m.into() {
+            escrow.paused = 0;
+        }
+        msg!("{:?}",escrow);
         multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
-        save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
+        escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        Ok(())
+    }
+    fn process_reject_token_stream_multisig(accounts: &[AccountInfo]) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
+        let initiator_account_info = next_account_info(account_info_iter)?; // stream initiator address
+        let pda_data = next_account_info(account_info_iter)?; // stored data 
+        let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
+        let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
+
+        let escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        msg!("multisig: {} escrow:{}",multisig_check.multisig_safe,escrow.multisig_safe);
+
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if multisig_check.multisig_safe !=escrow.multisig_safe{
+            return Err(TokenError::PublicKeyMismatch.into());
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+        withdraw_state.amount -= escrow.amount;
+        withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
+        let dest_starting_lamports = initiator_account_info.lamports();
+            **initiator_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
         Ok(())
     }
     // Function to withdraw from  token streaming 
@@ -1769,7 +1806,7 @@ impl Processor {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
         let dest_account_info = next_account_info(account_info_iter)?; // recipient
-        let pda = next_account_info(account_info_iter)?; // master pda
+        let pda = next_account_info(account_info_iter)?; // multisig vault
         let multisig_pda_data = next_account_info(account_info_iter)?; // Multisig pda stored data
         let pda_data = next_account_info(account_info_iter)?; // Program pda to store data
         let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
@@ -1782,8 +1819,8 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?;
 
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
-            PREFIX_TOKEN,
-            source_account_info.key,
+            PREFIXMULTISIG,
+            &pda.key,
             program_id,
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
@@ -1825,7 +1862,7 @@ impl Processor {
             return Err(ProgramError::InsufficientFunds);
         }
 
-        let (_account_address, bump_seed) = get_multisig_data_and_bump_seed(
+        let (account_address_multisig, bump_seed) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
@@ -1835,7 +1872,10 @@ impl Processor {
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed],
         ];
-        let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address,&escrow.token_mint);
+
+        let pda_associated_token = spl_associated_token_account::get_associated_token_address(&account_address_multisig,&escrow.token_mint);
+        msg!("pda_associated_token frontend:{}",pda_associated_info.key);
+        msg!("pda_associated_token frontend:{}",pda_associated_token);
         assert_keys_equal(pda_associated_token, *pda_associated_info.key)?;
         if receiver_associated_info.data_is_empty(){
             invoke(            
@@ -2029,6 +2069,18 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
+
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -2060,6 +2112,18 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
+
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -2239,7 +2303,7 @@ impl Processor {
             }
             TokenInstruction::ProcessRejectTokenMultisigStream=> {
                 msg!("Instruction: Rejecting stream ");
-                Self::process_reject_sol_stream_multisig(accounts)
+                Self::process_reject_token_stream_multisig(accounts)
             }
             TokenInstruction::SignedByToken{whitelist_v4} => {
                 msg!("Instruction: Signning multisig");
