@@ -130,6 +130,21 @@ pub fn get_withdraw_data_and_bump_seed(
     )
 }
 
+pub fn get_token_withdraw_data_and_bump_seed(
+    prefix: &str,
+    sender: &Pubkey,
+    token_mint: &Pubkey,
+    program_id: &Pubkey,
+) -> (Pubkey, u8) {
+    Pubkey::find_program_address(
+        &[
+            prefix.as_bytes(),
+            &sender.to_bytes(),
+            &token_mint.to_bytes()
+        ],
+        program_id,
+    )
+}
 pub fn get_multisig_data_and_bump_seed(
     prefix: &str,
     sender: &Pubkey,
