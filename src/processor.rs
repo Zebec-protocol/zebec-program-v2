@@ -565,12 +565,6 @@ impl Processor {
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
 
-        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
-            PREFIX_TOKEN,
-            source_account_info.key,
-            program_id,
-        );
-        assert_keys_equal(*withdraw_data.key,account_address )?;
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -1368,9 +1362,10 @@ impl Processor {
         assert_keys_equal(spl_token::id(), *token_program_info.key)?;
         assert_keys_equal(account_address, *pda.key)?;
         assert_keys_equal(pda_associated_token, *multisig_pda_associated_info.key)?;
-        let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+        let (account_address, _bump_seed) = get_token_withdraw_data_and_bump_seed(
             PREFIX_TOKEN,
             source_account_info.key,
+            token_mint_info.key,
             program_id,
         );
         assert_keys_equal(account_address, *withdraw_data.key)?;
@@ -1811,7 +1806,6 @@ impl Processor {
         assert_keys_equal(*withdraw_data.key,account_address )?;
         let withdraw_data_signer_seeds: &[&[_]] = &[
             PREFIXMULTISIG.as_bytes(),
-            &source_account_info.key.to_bytes(),
             &multisig_check.multisig_safe.to_bytes(),
             &escrow.token_mint.to_bytes(),
             &[bump_seed],
