@@ -2148,6 +2148,9 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        if multisig_check.multisig_safe != escrow.multisig_safe{
+            return Err(TokenError::OwnerMismatch.into());
+        }
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
@@ -2192,6 +2195,9 @@ impl Processor {
         }
         let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        if multisig_check.multisig_safe != escrow.multisig_safe{
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
         }
