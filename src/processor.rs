@@ -42,7 +42,8 @@ use crate::{
         get_withdraw_data_and_bump_seed,
         create_pda_account_signed,
         get_multisig_data_and_bump_seed,
-        get_token_withdraw_data_and_bump_seed
+        get_token_withdraw_data_and_bump_seed,
+        get_token_balance
     },
     PREFIX,
     PREFIXMULTISIG,
@@ -50,7 +51,7 @@ use crate::{
     PREFIXMULTISIGSAFE
 };
 use spl_associated_token_account::get_associated_token_address;
-
+use spl_token::state::{Account, Mint};
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
@@ -969,7 +970,15 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        let (account_address, _bump_seed) = get_token_withdraw_data_and_bump_seed(
+            PREFIX_TOKEN,
+            source_account_info.key,
+            token_mint_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,account_address )?;
         if withdraw_data.data_is_empty(){
+            msg!("hi");
             invoke_signed(
                 &spl_token::instruction::transfer(
                     token_program_info.key,
@@ -989,7 +998,8 @@ impl Processor {
             )?;
         }
         else{
-            let allowed_amt = pda.lamports() - amount;
+            let token_balance = get_token_balance(pda_associated_info);
+            let allowed_amt = token_balance.unwrap() - amount;
             let withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
             if allowed_amt < withdraw_state.amount {
                 return Err(TokenError::StreamedAmt.into()); 

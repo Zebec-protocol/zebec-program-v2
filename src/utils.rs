@@ -4,8 +4,11 @@ use solana_program::{
     system_instruction,
     program::{invoke_signed,invoke},
     entrypoint::ProgramResult,
+    program_error::ProgramError,
+    program_pack::Pack
 };
 use super::error::TokenError;
+use arrayref::array_ref;
 
 pub fn get_master_address_and_bump_seed(
     sender: &Pubkey,
@@ -157,4 +160,17 @@ pub fn get_multisig_data_and_bump_seed(
         ],
         program_id,
     )
+}
+pub fn check_data_len(data: &[u8], min_len: usize) -> Result<(), ProgramError> {
+    if data.len() < min_len {
+        Err(ProgramError::AccountDataTooSmall)
+    } else {
+        Ok(())
+    }
+}
+pub fn get_token_balance(token_account: &AccountInfo) -> Result<u64, ProgramError> {
+    let data = token_account.try_borrow_data()?;
+    check_data_len(&data, spl_token::state::Account::get_packed_len())?;
+    let amount = array_ref![data, 64, 8];
+    Ok(u64::from_le_bytes(*amount))
 }
