@@ -552,7 +552,7 @@ impl Processor {
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
-                    receiver_associated_info.clone(),
+                    associated_fee_account.clone(),
                     fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
@@ -585,7 +585,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                receiver_associated_info.key,
+                associated_fee_account.key,
                 pda.key,
                 &[pda.key],
                 receiver_amount
@@ -593,7 +593,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -717,7 +717,7 @@ impl Processor {
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
-                    receiver_associated_info.clone(),
+                    associated_fee_account.clone(),
                     fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
@@ -758,7 +758,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -1775,7 +1775,7 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
 
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
-        if fee_account.key == fee_receiver {
+        if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
         }
         if !source_account_info.is_signer {
@@ -2227,7 +2227,7 @@ impl Processor {
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
-                    receiver_associated_info.clone(),
+                    associated_fee_account.clone(),
                     fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
@@ -2243,7 +2243,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                receiver_associated_info.key,
+                associated_fee_account.key,
                 pda.key,
                 &[pda.key],
                 comission
@@ -2251,7 +2251,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -2396,7 +2396,7 @@ impl Processor {
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
-                    receiver_associated_info.clone(),
+                    associated_fee_account.clone(),
                     fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
@@ -2420,7 +2420,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
