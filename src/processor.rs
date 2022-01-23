@@ -1870,7 +1870,7 @@ impl Processor {
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
-            if multisig_check.signers[i].address != signed_by.address {
+            if multisig_check.signers[i].address != *source_account_info.key{
                 k += 1;
             }
         }
