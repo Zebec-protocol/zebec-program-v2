@@ -10,7 +10,6 @@ use crate::{
 use solana_program::{
     account_info::AccountInfo, entrypoint, entrypoint::ProgramResult,
     pubkey::Pubkey,
-    instruction::{AccountMeta, Instruction},
     program_error::PrintProgramError,
 };
 pub const PREFIX: &str = "withdraw_sol";
