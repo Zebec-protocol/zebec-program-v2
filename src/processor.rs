@@ -48,7 +48,8 @@ use crate::{
     PREFIX,
     PREFIXMULTISIG,
     PREFIX_TOKEN,
-    PREFIXMULTISIGSAFE
+    PREFIXMULTISIGSAFE,
+    ADMIN
 };
 use spl_associated_token_account::get_associated_token_address;
 /// Program state handler.
@@ -534,12 +535,12 @@ impl Processor {
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
                     dest_account_info.key,
-                    dest_account_info.key,
+                    fee_account.key,
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
                     receiver_associated_info.clone(),
-                    dest_account_info.clone(),
+                    fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
                     rent_info.clone(),
@@ -695,12 +696,12 @@ impl Processor {
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
                     dest_account_info.key,
-                    dest_account_info.key,
+                    fee_account.key,
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
                     receiver_associated_info.clone(),
-                    dest_account_info.clone(),
+                    fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
                     rent_info.clone(),
@@ -2192,12 +2193,12 @@ impl Processor {
             invoke(            
                 &spl_associated_token_account::create_associated_token_account(
                     dest_account_info.key,
-                    dest_account_info.key,
+                    fee_account.key,
                     token_mint_info.key,
                 ),&[
                     dest_account_info.clone(),
                     receiver_associated_info.clone(),
-                    dest_account_info.clone(),
+                    fee_account.clone(),
                     token_mint_info.clone(),
                     token_program_info.clone(),
                     rent_info.clone(),
@@ -2278,7 +2279,7 @@ impl Processor {
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
         let fee_account = next_account_info(account_info_iter)?;
-
+        let associated_fee_account = next_account_info(account_info_iter)?;
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -2286,6 +2287,7 @@ impl Processor {
                 k += 1;
             }
         }
+        // if fee_account.key = ADMIN {}
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2350,6 +2352,28 @@ impl Processor {
                 ]
             )?
         }
+        let fee_account_associated_token = spl_associated_token_account::get_associated_token_address(&fee_account.key,&escrow.token_mint);
+        assert_keys_equal(*associated_fee_account.key, fee_account_associated_token)?;
+        if associated_fee_account.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    dest_account_info.key,
+                    fee_account.key,
+                    token_mint_info.key,
+                ),&[
+                    dest_account_info.clone(),
+                    receiver_associated_info.clone(),
+                    fee_account.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
+        }
+        let comission: u64 = 25*dest_account_amount/10000; 
+        let receiver_amount:u64=dest_account_amount-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -2357,7 +2381,24 @@ impl Processor {
                 receiver_associated_info.key,
                 pda.key,
                 &[pda.key],
-                dest_account_amount
+                comission
+            )?,
+            &[
+                token_program_info.clone(),
+                pda_associated_info.clone(),
+                receiver_associated_info.clone(),
+                pda.clone(),
+                system_program.clone()
+            ],&[&pda_signer_seeds],
+        )?;
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                pda_associated_info.key,
+                receiver_associated_info.key,
+                pda.key,
+                &[pda.key],
+                receiver_amount
             )?,
             &[
                 token_program_info.clone(),
