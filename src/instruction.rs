@@ -108,6 +108,9 @@ pub enum TokenInstruction {
         whitelist_v4:WhiteList
     },
     ProcessSolTransfer{whitelist_v3:SolTransfer},
+    SignedByTransferSol{
+        whitelist_v4:WhiteList
+    },
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -260,6 +263,9 @@ impl TokenInstruction {
             }
             33 =>{
                 Self::ProcessSolTransfer{whitelist_v3:SolTransfer::try_from_slice(rest)?}
+            }
+            34 => {
+                Self::SignedByTransferSol{whitelist_v4:WhiteList::try_from_slice(rest)?}
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),

@@ -1531,6 +1531,11 @@ impl Processor {
                 escrow.amount,
                 pda_signer_seeds
             )?;
+            let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
         }
         msg!("{:?}",escrow);
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
@@ -2475,6 +2480,10 @@ impl Processor {
             TokenInstruction::ProcessSolTransfer{whitelist_v3} => {
                 msg!("Instruction: Signning multisig");
                 Self::process_trasfer_sol_multisig(program_id,accounts,whitelist_v3) 
+            }
+            TokenInstruction::SignedByTransferSol{whitelist_v4} => {
+                msg!("Instruction: Signning multisig");
+                Self::process_transfer_sol_sign_multisig(program_id,accounts,whitelist_v4) 
             }
         }
     }
