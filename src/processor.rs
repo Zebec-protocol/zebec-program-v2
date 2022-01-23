@@ -568,7 +568,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                receiver_associated_info.key,
+                associated_fee_account.key,
                 pda.key,
                 &[pda.key],
                 comission
@@ -576,7 +576,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -585,7 +585,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                associated_fee_account.key,
+                receiver_associated_info.key,
                 pda.key,
                 &[pda.key],
                 receiver_amount
@@ -593,7 +593,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                associated_fee_account.clone(),
+                receiver_associated_info.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -733,7 +733,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                receiver_associated_info.key,
+                associated_fee_account.key,
                 pda.key,
                 &[pda.key],
                 comission
@@ -741,7 +741,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                receiver_associated_info.clone(),
+                associated_fee_account.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -758,7 +758,7 @@ impl Processor {
             &[
                 token_program_info.clone(),
                 pda_associated_info.clone(),
-                associated_fee_account.clone(),
+                receiver_associated_info.clone(),
                 pda.clone(),
                 system_program.clone()
             ],&[&pda_signer_seeds],
@@ -2412,7 +2412,7 @@ impl Processor {
             &spl_token::instruction::transfer(
                 token_program_info.key,
                 pda_associated_info.key,
-                receiver_associated_info.key,
+                associated_fee_account.key,
                 pda.key,
                 &[pda.key],
                 comission
