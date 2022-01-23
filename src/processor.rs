@@ -1927,8 +1927,8 @@ impl Processor {
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient {
-            return Err(TokenError::EscrowMismatch.into());
+        if multisig_check.multisig_safe != escrow.multisig_safe{
+            return Err(TokenError::OwnerMismatch.into());
         }
         if escrow.paused ==0{
             return Err(TokenError::AlreadyResumed.into());
