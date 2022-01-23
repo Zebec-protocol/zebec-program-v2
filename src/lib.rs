@@ -17,7 +17,6 @@ pub const PREFIX: &str = "withdraw_sol";
 pub const PREFIX_TOKEN: &str = "withdraw_token";
 pub const PREFIXMULTISIG: &str = "withdraw_multisig_sol";
 pub const PREFIXMULTISIGSAFE: &str = "multisig_safe";
-pub const ADMIN :&str = "EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k";
 
 /// Minimum number of multisignature signers (min N)
 pub const MIN_SIGNERS: usize = 1;

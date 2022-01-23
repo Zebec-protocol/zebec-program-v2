@@ -49,9 +49,10 @@ use crate::{
     PREFIXMULTISIG,
     PREFIX_TOKEN,
     PREFIXMULTISIGSAFE,
-    ADMIN
 };
 use spl_associated_token_account::get_associated_token_address;
+use std::str::FromStr;
+
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
@@ -146,7 +147,11 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account =  next_account_info(account_info_iter)?; // 0.25 fee account
-
+        
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIX,
             source_account_info.key,
@@ -235,6 +240,10 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account = next_account_info(account_info_iter)?;
 
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -463,6 +472,10 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
@@ -629,6 +642,10 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -1656,7 +1673,11 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account = next_account_info(account_info_iter)?;
-        // msg!("{:?}",pda);
+
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIXMULTISIG,
@@ -1753,6 +1774,10 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account = next_account_info(account_info_iter)?;
 
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key == fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2109,6 +2134,11 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?;
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
+
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
@@ -2280,6 +2310,11 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program id
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
+
+        let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
+        if fee_account.key != fee_receiver {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -2287,7 +2322,6 @@ impl Processor {
                 k += 1;
             }
         }
-        // if fee_account.key = ADMIN {}
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
