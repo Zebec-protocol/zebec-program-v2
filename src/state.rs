@@ -88,7 +88,7 @@ impl Multisig {
 /// Initializeing solana stream states
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
-pub struct Escrow_multisig{
+pub struct EscrowMultisig{
     pub start_time: u64,
     pub end_time: u64,
     pub paused: u64,
@@ -125,9 +125,9 @@ impl TokenEscrowMultisig {
         ) as u64 
     }
 }
-impl Escrow_multisig {
-    pub fn from_account(account:&AccountInfo)-> Result<Escrow_multisig, ProgramError> {
-        let md: Escrow_multisig =try_from_slice_unchecked(&account.data.borrow_mut())?;
+impl EscrowMultisig {
+    pub fn from_account(account:&AccountInfo)-> Result<EscrowMultisig, ProgramError> {
+        let md: EscrowMultisig =try_from_slice_unchecked(&account.data.borrow_mut())?;
         Ok(md)
     }
 
@@ -136,4 +136,13 @@ impl Escrow_multisig {
         ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
         ) as u64 
     }
+}
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct SolTransfer{
+    pub sender:   Pubkey,
+    pub recipient: Pubkey,
+    pub signed_by: Vec<WhiteList>,
+    pub multisig_safe: Pubkey,
+    pub amount : u64
 }

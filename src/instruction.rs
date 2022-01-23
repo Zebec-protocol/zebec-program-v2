@@ -6,7 +6,7 @@ use {borsh::{BorshDeserialize}};
 
 use crate::{
     error::TokenError,
-    state::{WhiteList,Multisig,Escrow_multisig,TokenEscrowMultisig}
+    state::{WhiteList,Multisig,EscrowMultisig,TokenEscrowMultisig,SolTransfer}
 };
 use std::convert::TryInto;
 
@@ -63,6 +63,10 @@ pub struct ProcessSolWithdrawStreamMultisig{
 pub struct ProcessTokenWithdrawStreamMultisig{
     pub amount: u64,
 }
+pub struct ProcessSolTransferStream{
+    /// Amount of fund
+    pub amount: u64,
+}
 pub enum TokenInstruction {
     ProcessSolStream(ProcessSolStream),
     ProcessSolWithdrawStream(ProcessSolWithdrawStream),
@@ -88,7 +92,7 @@ pub enum TokenInstruction {
     SignedBy{
         whitelist_v2:WhiteList
     },
-    ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig},
+    ProcessSolMultiSigStream{whitelist_v3:EscrowMultisig},
     ProcessSolWithdrawStreamMultisig(ProcessSolWithdrawStreamMultisig),
     ProcessSolCancelStreamMultisig,
     ProcessPauseMultisigStream,
@@ -102,7 +106,8 @@ pub enum TokenInstruction {
     ProcessRejectTokenMultisigStream,
     SignedByToken{
         whitelist_v4:WhiteList
-    }
+    },
+    ProcessSolTransfer{whitelist_v3:SolTransfer},
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -211,7 +216,7 @@ impl TokenInstruction {
                 Self::SignedBy{whitelist_v2:WhiteList::try_from_slice(rest)?}
             }
             20 => {
-                Self::ProcessSolMultiSigStream{whitelist_v3:Escrow_multisig::try_from_slice(rest)?}
+                Self::ProcessSolMultiSigStream{whitelist_v3:EscrowMultisig::try_from_slice(rest)?}
             }
             21 => {
                 let (amount, _rest) = rest.split_at(8);
@@ -252,6 +257,9 @@ impl TokenInstruction {
             }
             32 =>{
                 Self::SignedByToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
+            }
+            33 =>{
+                Self::ProcessSolTransfer{whitelist_v3:SolTransfer::try_from_slice(rest)?}
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),
