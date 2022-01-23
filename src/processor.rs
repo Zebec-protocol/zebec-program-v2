@@ -144,6 +144,7 @@ impl Processor {
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
+        let fee_account =  next_account_info(account_info_iter)?; // 0.25 fee account
 
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIX,
@@ -187,11 +188,20 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
+        let comission: u64 = 25*amount/10000; 
+        let receiver_amount:u64=amount-comission;
+        create_transfer(
+            pda,
+            fee_account,
+            system_program,
+            comission,
+            pda_signer_seeds
+        )?;
         create_transfer(
             pda,
             dest_account_info,
             system_program,
-            amount,
+            receiver_amount,
             pda_signer_seeds
         )?;
         if escrow.paused == 1{
@@ -222,6 +232,8 @@ impl Processor {
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
+        let fee_account = next_account_info(account_info_iter)?;
+
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -257,12 +269,21 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
+        let comission: u64 = 25*dest_account_amount/10000; 
+        let receiver_amount:u64=dest_account_amount-comission;
+        create_transfer(
+            pda,
+            fee_account,
+            system_program,
+            comission,
+            pda_signer_seeds
+        )?;
         // Sending streamed payment to receiver 
         create_transfer(
             pda,
             dest_account_info,
             system_program,
-            dest_account_amount,
+            receiver_amount,
             pda_signer_seeds
         )?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
@@ -438,6 +459,8 @@ impl Processor {
         let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?;
+        let fee_account = next_account_info(account_info_iter)?;
+        let associated_fee_account = next_account_info(account_info_iter)?;
 
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
@@ -505,6 +528,28 @@ impl Processor {
                 ]
             )?
         }
+        let fee_account_associated_token = spl_associated_token_account::get_associated_token_address(&fee_account.key,&escrow.token_mint);
+        assert_keys_equal(*associated_fee_account.key, fee_account_associated_token)?;
+        if associated_fee_account.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    dest_account_info.key,
+                    dest_account_info.key,
+                    token_mint_info.key,
+                ),&[
+                    dest_account_info.clone(),
+                    receiver_associated_info.clone(),
+                    dest_account_info.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
+        }
+        let comission: u64 = 25*amount/10000; 
+        let receiver_amount:u64=amount-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -512,7 +557,24 @@ impl Processor {
                 receiver_associated_info.key,
                 pda.key,
                 &[pda.key],
-                amount
+                comission
+            )?,
+            &[
+                token_program_info.clone(),
+                pda_associated_info.clone(),
+                receiver_associated_info.clone(),
+                pda.clone(),
+                system_program.clone()
+            ],&[&pda_signer_seeds],
+        )?;
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                pda_associated_info.key,
+                receiver_associated_info.key,
+                pda.key,
+                &[pda.key],
+                receiver_amount
             )?,
             &[
                 token_program_info.clone(),
@@ -563,6 +625,8 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // pda associated token info 
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
+        let fee_account = next_account_info(account_info_iter)?;
+        let associated_fee_account = next_account_info(account_info_iter)?;
 
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
@@ -625,6 +689,28 @@ impl Processor {
                 ]
             )?
         }
+        let fee_account_associated_token = spl_associated_token_account::get_associated_token_address(&fee_account.key,&escrow.token_mint);
+        assert_keys_equal(*associated_fee_account.key, fee_account_associated_token)?;
+        if associated_fee_account.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    dest_account_info.key,
+                    dest_account_info.key,
+                    token_mint_info.key,
+                ),&[
+                    dest_account_info.clone(),
+                    receiver_associated_info.clone(),
+                    dest_account_info.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
+        }
+        let comission: u64 = 25*dest_account_amount/10000; 
+        let receiver_amount:u64=dest_account_amount-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -632,7 +718,24 @@ impl Processor {
                 receiver_associated_info.key,
                 pda.key,
                 &[pda.key],
-                dest_account_amount
+                comission
+            )?,
+            &[
+                token_program_info.clone(),
+                pda_associated_info.clone(),
+                receiver_associated_info.clone(),
+                pda.clone(),
+                system_program.clone()
+            ],&[&pda_signer_seeds],
+        )?;
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                pda_associated_info.key,
+                receiver_associated_info.key,
+                pda.key,
+                &[pda.key],
+                receiver_amount
             )?,
             &[
                 token_program_info.clone(),
@@ -1487,6 +1590,7 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
         let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
         let system_program = next_account_info(account_info_iter)?; 
+        let fee_account = next_account_info(account_info_iter)?;
 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -1550,6 +1654,7 @@ impl Processor {
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
+        let fee_account = next_account_info(account_info_iter)?;
         // msg!("{:?}",pda);
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
@@ -1600,11 +1705,20 @@ impl Processor {
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed_multisig],
         ];
+        let comission: u64 = 25*amount/10000; 
+        let receiver_amount:u64=amount-comission;
+        create_transfer(
+            pda,
+            fee_account,
+            system_program,
+            comission,
+            pda_signer_seeds
+        )?;
         create_transfer(
             pda,
             dest_account_info,
             system_program,
-            amount,
+            receiver_amount,
             pda_signer_seeds
         )?;
         if escrow.paused == 1{
@@ -1636,6 +1750,7 @@ impl Processor {
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
+        let fee_account = next_account_info(account_info_iter)?;
 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -1689,12 +1804,21 @@ impl Processor {
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed_multisig],
         ];
+        let comission: u64 = 25*dest_account_amount/10000; 
+        let receiver_amount:u64=dest_account_amount-comission;
+        create_transfer(
+            pda,
+            fee_account,
+            system_program,
+            comission,
+            pda_signer_seeds
+        )?;
         // Sending streamed payment to receiver 
         create_transfer(
             pda,
             dest_account_info,
             system_program,
-            dest_account_amount,
+            receiver_amount,
             pda_signer_seeds
         )?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
@@ -1982,7 +2106,8 @@ impl Processor {
         let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?;
-
+        let fee_account = next_account_info(account_info_iter)?;
+        let associated_fee_account = next_account_info(account_info_iter)?;
         if token_program_info.key != &spl_token::id() {
             return Err(ProgramError::IncorrectProgramId);
         }    
@@ -2061,6 +2186,28 @@ impl Processor {
                 ]
             )?
         }
+        let fee_account_associated_token = spl_associated_token_account::get_associated_token_address(&fee_account.key,&escrow.token_mint);
+        assert_keys_equal(*associated_fee_account.key, fee_account_associated_token)?;
+        if associated_fee_account.data_is_empty(){
+            invoke(            
+                &spl_associated_token_account::create_associated_token_account(
+                    dest_account_info.key,
+                    dest_account_info.key,
+                    token_mint_info.key,
+                ),&[
+                    dest_account_info.clone(),
+                    receiver_associated_info.clone(),
+                    dest_account_info.clone(),
+                    token_mint_info.clone(),
+                    token_program_info.clone(),
+                    rent_info.clone(),
+                    associated_token_info.clone(),
+                    system_program.clone()
+                ]
+            )?
+        }
+        let comission: u64 = 25*amount/10000; 
+        let receiver_amount:u64=amount-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -2068,7 +2215,24 @@ impl Processor {
                 receiver_associated_info.key,
                 pda.key,
                 &[pda.key],
-                amount
+                comission
+            )?,
+            &[
+                token_program_info.clone(),
+                pda_associated_info.clone(),
+                receiver_associated_info.clone(),
+                pda.clone(),
+                system_program.clone()
+            ],&[&pda_signer_seeds],
+        )?;
+        invoke_signed(
+            &spl_token::instruction::transfer(
+                token_program_info.key,
+                pda_associated_info.key,
+                receiver_associated_info.key,
+                pda.key,
+                &[pda.key],
+                receiver_amount
             )?,
             &[
                 token_program_info.clone(),
@@ -2113,6 +2277,7 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // pda associated token info 
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?; // system program id
+        let fee_account = next_account_info(account_info_iter)?;
 
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
