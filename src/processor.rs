@@ -31,7 +31,7 @@ use crate::{
         ProcessSolWithdrawStreamMultisig,
         ProcessTokenWithdrawStreamMultisig
     },
-    state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,TokenEscrowMultisig,EscrowMultisig,SolTransfer},
+    state::{Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,TokenEscrowMultisig,EscrowMultisig,SolTransfer,TokenTransfer},
     error::TokenError,
     utils::{
         assert_keys_equal,
@@ -1590,7 +1590,7 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = SolTransfer::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = SolTransfer::from_account(pda_data)?;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
         escrow.amount = data.amount;
@@ -1608,7 +1608,6 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
         let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
         let system_program = next_account_info(account_info_iter)?; 
-        let fee_account = next_account_info(account_info_iter)?;
 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
@@ -1623,7 +1622,7 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = SolTransfer::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = SolTransfer::from_account(pda_data)?;
         let mut n = 0; 
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
@@ -2551,6 +2550,145 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
+    /// Function to deposit solana
+    fn process_trasfer_token_multisig(program_id: &Pubkey,accounts: &[AccountInfo],data: TokenTransfer,) -> ProgramResult {
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?; // sender
+        let dest_account_info = next_account_info(account_info_iter)?; // reciver
+        let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda data
+        let pda_data = next_account_info(account_info_iter)?; // new sol.keypair
+        let token_mint = next_account_info(account_info_iter)?; // token mint address
+
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let (_account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
+            PREFIXMULTISIGSAFE,
+            multisig_pda_data.key,
+            program_id,
+        );
+        let multisig_check = Multisig::from_account(multisig_pda_data)?;
+        assert_keys_equal(_account_address_multisig, multisig_check.multisig_safe)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let mut escrow = TokenTransfer::from_account(pda_data)?;
+        escrow.sender = *source_account_info.key;
+        escrow.recipient = *dest_account_info.key;
+        escrow.amount = data.amount;
+        escrow.signed_by = data.signed_by;
+        escrow.multisig_safe = multisig_check.multisig_safe;
+        escrow.token_mint = *token_mint.key;
+        msg!("{:?}",escrow);
+        escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        Ok(())
+    }
+    fn process_transfer_token_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;  //sender
+        let dest_account_info = next_account_info(account_info_iter)?;  //receiver
+        let multisig_vault = next_account_info(account_info_iter)?;  //multig vault 
+        let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
+        let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
+        let token_program_info = next_account_info(account_info_iter)?; // {TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA}
+        let token_mint_info = next_account_info(account_info_iter)?; // token you would like to initilaize 
+        let rent_info = next_account_info(account_info_iter)?; // rent address
+        let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of multisig vault
+        let receiver_associated_info = next_account_info(account_info_iter)?; // Associated token of receiver
+        let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
+        let system_program = next_account_info(account_info_iter)?;
+
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let mut escrow = TokenTransfer::from_account(pda_data)?;
+        let mut n = 0; 
+        for i in 0..escrow.signed_by.len(){
+            if escrow.signed_by[i].address == signed_by.address {
+                n += 1;
+            }
+        }
+        if n > 0{
+            return Err(TokenError::PublicKeyMismatch.into()); 
+        }
+        escrow.signed_by.push(signed_by);
+        if  escrow.signed_by.len() >= multisig_check.m.into() {
+            if *dest_account_info.key != escrow.recipient {
+                return Err(TokenError::EscrowMismatch.into());
+            }
+            assert_keys_equal(escrow.token_mint, *token_mint_info.key)?;
+            let (account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
+                PREFIXMULTISIGSAFE,
+                pda_data_multisig.key,
+                program_id,
+            );
+            let pda_signer_seeds: &[&[_]] = &[
+                &PREFIXMULTISIGSAFE.as_bytes(),
+                &pda_data_multisig.key.to_bytes(),
+                &[bump_seed_multisig],
+            ];
+            assert_keys_equal(*multisig_vault.key,account_address_multisig)?;
+            if receiver_associated_info.data_is_empty(){
+                invoke(            
+                    &spl_associated_token_account::create_associated_token_account(
+                        source_account_info.key,
+                        dest_account_info.key,
+                        token_mint_info.key,
+                    ),&[
+                        source_account_info.clone(),
+                        receiver_associated_info.clone(),
+                        dest_account_info.clone(),
+                        token_mint_info.clone(),
+                        token_program_info.clone(),
+                        rent_info.clone(),
+                        associated_token_info.clone(),
+                        system_program.clone()
+                    ]
+                )?
+            }
+            invoke_signed(
+                &spl_token::instruction::transfer(
+                    token_program_info.key,
+                    pda_associated_info.key,
+                    receiver_associated_info.key,
+                    multisig_vault.key,
+                    &[multisig_vault.key],
+                    escrow.amount
+                )?,
+                &[
+                    token_program_info.clone(),
+                    pda_associated_info.clone(),
+                    receiver_associated_info.clone(),
+                    multisig_vault.clone(),
+                    system_program.clone()
+                ],&[&pda_signer_seeds],
+            )?;
+            let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
+        }
+        msg!("{:?}",escrow);
+        escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        Ok(())
+    }
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
         let instruction = TokenInstruction::unpack(input)?;
@@ -2695,6 +2833,7 @@ impl Processor {
             }
             TokenInstruction::ProcessTokenWithdrawStreamMultisig (ProcessTokenWithdrawStreamMultisig{
                 amount}) =>{
+                    msg!("Instruction: Withdraw Token MultiSig");
                     Self::process_token_withdraw_multisig_stream(program_id,accounts,amount) 
                 }
             TokenInstruction::ProcessTokenCancelStreamMultisig => {
@@ -2710,20 +2849,28 @@ impl Processor {
                 Self::process_resume_token_multisig_stream(accounts)
             }
             TokenInstruction::ProcessRejectTokenMultisigStream=> {
-                msg!("Instruction: Rejecting stream ");
+                msg!("Instruction: Rejecting token stream ");
                 Self::process_reject_token_stream_multisig(accounts)
             }
             TokenInstruction::SignedByToken{whitelist_v4} => {
-                msg!("Instruction: Signning multisig");
+                msg!("Instruction: Signning token multisig");
                 Self::process_sign_token_stream(program_id,accounts,whitelist_v4) 
             }
             TokenInstruction::ProcessSolTransfer{whitelist_v3} => {
-                msg!("Instruction: Signning multisig");
+                msg!("Instruction: Initiating Sol transfer multisig");
                 Self::process_trasfer_sol_multisig(program_id,accounts,whitelist_v3) 
             }
             TokenInstruction::SignedByTransferSol{whitelist_v4} => {
-                msg!("Instruction: Signning multisig");
+                msg!("Instruction: Signning Sol transfer multisig");
                 Self::process_transfer_sol_sign_multisig(program_id,accounts,whitelist_v4) 
+            }
+            TokenInstruction::ProcessTokenTransfer{whitelist_v3} => {
+                msg!("Instruction: Initiating token transfer multisig");
+                Self::process_trasfer_token_multisig(program_id,accounts,whitelist_v3) 
+            }
+            TokenInstruction::SignedByTransferToken{whitelist_v4} => {
+                msg!("Instruction: Signning token transfer multisig");
+                Self::process_transfer_token_sign_multisig(program_id,accounts,whitelist_v4) 
             }
         }
     }

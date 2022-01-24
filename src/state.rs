@@ -146,3 +146,25 @@ pub struct SolTransfer{
     pub multisig_safe: Pubkey,
     pub amount : u64
 }
+impl SolTransfer {
+    pub fn from_account(account:&AccountInfo)-> Result<SolTransfer, ProgramError> {
+        let md: SolTransfer =try_from_slice_unchecked(&account.data.borrow_mut())?;
+        Ok(md)
+    }
+}
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct TokenTransfer{
+    pub sender:   Pubkey,
+    pub recipient: Pubkey,
+    pub signed_by: Vec<WhiteList>,
+    pub multisig_safe: Pubkey,
+    pub amount : u64,
+    pub token_mint : Pubkey
+}
+impl TokenTransfer {
+    pub fn from_account(account:&AccountInfo)-> Result<TokenTransfer, ProgramError> {
+        let md: TokenTransfer =try_from_slice_unchecked(&account.data.borrow_mut())?;
+        Ok(md)
+    }
+}

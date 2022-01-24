@@ -6,7 +6,7 @@ use {borsh::{BorshDeserialize}};
 
 use crate::{
     error::TokenError,
-    state::{WhiteList,Multisig,EscrowMultisig,TokenEscrowMultisig,SolTransfer}
+    state::{WhiteList,Multisig,EscrowMultisig,TokenEscrowMultisig,SolTransfer,TokenTransfer}
 };
 use std::convert::TryInto;
 
@@ -109,6 +109,10 @@ pub enum TokenInstruction {
     },
     ProcessSolTransfer{whitelist_v3:SolTransfer},
     SignedByTransferSol{
+        whitelist_v4:WhiteList
+    },
+    ProcessTokenTransfer{whitelist_v3:TokenTransfer},
+    SignedByTransferToken{
         whitelist_v4:WhiteList
     },
 }
@@ -266,6 +270,12 @@ impl TokenInstruction {
             }
             34 => {
                 Self::SignedByTransferSol{whitelist_v4:WhiteList::try_from_slice(rest)?}
+            }
+            35 =>{
+                Self::ProcessTokenTransfer{whitelist_v3:TokenTransfer::try_from_slice(rest)?}
+            }
+            36 => {
+                Self::SignedByTransferToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
             }
 
             _ => return Err(TokenError::InvalidInstruction.into()),
