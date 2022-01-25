@@ -1,6 +1,7 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
+    msg
 };
 use {borsh::{BorshDeserialize}};
 

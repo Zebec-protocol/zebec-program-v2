@@ -1307,7 +1307,6 @@ impl Processor {
         );
         let withdraw_data_signer_seeds: &[&[_]] = &[
             PREFIXMULTISIG.as_bytes(),
-            &source_account_info.key.to_bytes(),
             &multisig_check.multisig_safe.to_bytes(),
             &[bump_seed],
         ];
@@ -1570,17 +1569,18 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?; // reciver
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda data
         let pda_data = next_account_info(account_info_iter)?; // new sol.keypair
+        let system_program = next_account_info(account_info_iter)?; 
 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let (_account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
+        let (account_address_multisig, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
             program_id,
         );
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
-        assert_keys_equal(_account_address_multisig, multisig_check.multisig_safe)?;
+        assert_keys_equal(account_address_multisig, multisig_check.multisig_safe)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
             if multisig_check.signers[i].address != *source_account_info.key {
@@ -1590,6 +1590,16 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        let rent = Rent::get()?; //
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<SolTransfer>()+355);
+        create_pda_account( 
+            source_account_info,
+            transfer_amount,
+            std::mem::size_of::<SolTransfer>()+355,
+            program_id,
+            system_program,
+            pda_data
+        )?;
         let mut escrow = SolTransfer::from_account(pda_data)?;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
@@ -1598,6 +1608,8 @@ impl Processor {
         escrow.multisig_safe = multisig_check.multisig_safe;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        multisig_check.serialize(&mut &mut multisig_pda_data.data.borrow_mut()[..])?;
+
         Ok(())
     }
     fn process_transfer_sol_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
@@ -1660,6 +1672,7 @@ impl Processor {
         }
         msg!("{:?}",escrow);
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
     fn process_sol_withdraw_stream_multisig(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64) -> ProgramResult {
@@ -2004,6 +2017,7 @@ impl Processor {
         escrow.multisig_safe = multisig_check.multisig_safe;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
+        multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
     fn process_sign_token_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
@@ -2013,6 +2027,7 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
         let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let system_program = next_account_info(account_info_iter)?; 
+        
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2558,7 +2573,7 @@ impl Processor {
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda data
         let pda_data = next_account_info(account_info_iter)?; // new sol.keypair
         let token_mint = next_account_info(account_info_iter)?; // token mint address
-
+        let system_program = next_account_info(account_info_iter)?; 
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2578,6 +2593,16 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        let rent = Rent::get()?; //
+        let transfer_amount =  rent.minimum_balance(std::mem::size_of::<TokenTransfer>()+355);
+        create_pda_account( 
+            source_account_info,
+            transfer_amount,
+            std::mem::size_of::<TokenTransfer>()+355,
+            program_id,
+            system_program,
+            pda_data
+        )?;
         let mut escrow = TokenTransfer::from_account(pda_data)?;
         escrow.sender = *source_account_info.key;
         escrow.recipient = *dest_account_info.key;
