@@ -1675,6 +1675,44 @@ impl Processor {
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
+    fn process_transfer_sol_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;  //sender
+        let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
+        let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
+
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let escrow = SolTransfer::from_account(pda_data)?;
+        let mut n = 0; 
+        for i in 0..escrow.signed_by.len(){
+            if escrow.signed_by[i].address == signed_by.address {
+                n += 1;
+            }
+        }
+        if n > 0{
+            return Err(TokenError::PublicKeyMismatch.into()); 
+        }       
+        escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
+        multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
+        Ok(())
+    }
     fn process_sol_withdraw_stream_multisig(program_id: &Pubkey,accounts: &[AccountInfo],amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
@@ -2027,7 +2065,7 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
         let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let system_program = next_account_info(account_info_iter)?; 
-        
+
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2712,6 +2750,38 @@ impl Processor {
         }
         msg!("{:?}",escrow);
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        Ok(())
+    }
+    fn process_transfer_token_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
+        let account_info_iter = &mut accounts.iter();
+        let source_account_info = next_account_info(account_info_iter)?;  //sender
+        let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
+        let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
+
+        if !source_account_info.is_signer {
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let multisig_check = Multisig::from_account(pda_data_multisig)?;
+        let mut k = 0; 
+        for i in 0..multisig_check.signers.len(){
+            if multisig_check.signers[i].address != *source_account_info.key {
+                k += 1;
+            }
+        }
+        if k == multisig_check.signers.len(){
+            return Err(ProgramError::MissingRequiredSignature); 
+        }
+        let escrow = TokenTransfer::from_account(pda_data)?;
+        if escrow.multisig_safe == multisig_check.multisig_safe{
+            return Err(ProgramError::MissingRequiredSignature); 
+        }  
+        escrow.serialize(&mut *pda_data.data.borrow_mut())?;
+        let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
+                .checked_add(pda_data.lamports())
+                .ok_or(TokenError::Overflow)?;
+            **pda_data.lamports.borrow_mut() = 0;
+        multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
     /// Processes an [Instruction](enum.Instruction.html).
