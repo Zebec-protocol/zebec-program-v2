@@ -1,7 +1,6 @@
 //! Instruction types
 use solana_program::{
     program_error::ProgramError,
-    msg
 };
 use {borsh::{BorshDeserialize}};
 
@@ -116,6 +115,8 @@ pub enum TokenInstruction {
     SignedByTransferToken{
         whitelist_v4:WhiteList
     },
+    ProcessRejectTransferSol,
+    ProcessRejectTransferToken
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -278,7 +279,12 @@ impl TokenInstruction {
             36 => {
                 Self::SignedByTransferToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
             }
-
+            37 =>{
+                Self::ProcessRejectTransferSol
+            }
+            38 => {
+                Self::ProcessRejectTransferToken
+            }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })
     }

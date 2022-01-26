@@ -1675,7 +1675,7 @@ impl Processor {
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_transfer_sol_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_transfer_sol_reject_multisig(accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
@@ -1694,16 +1694,7 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let escrow = SolTransfer::from_account(pda_data)?;
-        let mut n = 0; 
-        for i in 0..escrow.signed_by.len(){
-            if escrow.signed_by[i].address == signed_by.address {
-                n += 1;
-            }
-        }
-        if n > 0{
-            return Err(TokenError::PublicKeyMismatch.into()); 
-        }       
+        let escrow = SolTransfer::from_account(pda_data)?;   
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
         let dest_starting_lamports = source_account_info.lamports();
             **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -2752,7 +2743,7 @@ impl Processor {
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
-    fn process_transfer_token_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
+    fn process_transfer_token_reject_multisig(accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
@@ -2966,6 +2957,14 @@ impl Processor {
             TokenInstruction::SignedByTransferToken{whitelist_v4} => {
                 msg!("Instruction: Signning token transfer multisig");
                 Self::process_transfer_token_sign_multisig(program_id,accounts,whitelist_v4) 
+            }
+            TokenInstruction::ProcessRejectTransferSol => {
+                msg!("Instruction: Initiating token transfer multisig");
+                Self::process_transfer_sol_reject_multisig(accounts) 
+            }
+            TokenInstruction::ProcessRejectTransferToken => {
+                msg!("Instruction: Signning token transfer multisig");
+                Self::process_transfer_token_reject_multisig(accounts) 
             }
         }
     }
