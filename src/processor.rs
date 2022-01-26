@@ -1635,6 +1635,9 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let mut escrow = SolTransfer::from_account(pda_data)?;
+        if escrow.multisig_safe != multisig_check.multisig_safe{
+            return Err(ProgramError::MissingRequiredSignature); 
+        }  
         let mut n = 0; 
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
@@ -1695,6 +1698,9 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let escrow = SolTransfer::from_account(pda_data)?;   
+        if escrow.multisig_safe != multisig_check.multisig_safe{
+            return Err(ProgramError::MissingRequiredSignature); 
+        }  
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
         let dest_starting_lamports = source_account_info.lamports();
             **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -2681,6 +2687,9 @@ impl Processor {
         if n > 0{
             return Err(TokenError::PublicKeyMismatch.into()); 
         }
+        if escrow.multisig_safe != multisig_check.multisig_safe{
+            return Err(ProgramError::MissingRequiredSignature); 
+        }  
         escrow.signed_by.push(signed_by);
         if  escrow.signed_by.len() >= multisig_check.m.into() {
             if *dest_account_info.key != escrow.recipient {
@@ -2763,7 +2772,7 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let escrow = TokenTransfer::from_account(pda_data)?;
-        if escrow.multisig_safe == multisig_check.multisig_safe{
+        if escrow.multisig_safe != multisig_check.multisig_safe{
             return Err(ProgramError::MissingRequiredSignature); 
         }  
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
@@ -2959,11 +2968,11 @@ impl Processor {
                 Self::process_transfer_token_sign_multisig(program_id,accounts,whitelist_v4) 
             }
             TokenInstruction::ProcessRejectTransferSol => {
-                msg!("Instruction: Initiating token transfer multisig");
+                msg!("Instruction: Rejecting token transfer multisig");
                 Self::process_transfer_sol_reject_multisig(accounts) 
             }
             TokenInstruction::ProcessRejectTransferToken => {
-                msg!("Instruction: Signning token transfer multisig");
+                msg!("Instruction: Rejecting token transfer multisig");
                 Self::process_transfer_token_reject_multisig(accounts) 
             }
         }
