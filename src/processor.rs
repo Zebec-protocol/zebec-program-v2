@@ -152,6 +152,9 @@ impl Processor {
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
         }
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIX,
             source_account_info.key,
@@ -244,6 +247,9 @@ impl Processor {
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
         }
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -312,12 +318,15 @@ impl Processor {
         Ok(())
     }
     //Function to pause solana stream
-    fn process_pause_sol_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_pause_sol_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id {
+            return Err(ProgramError::InvalidArgument);
+        }
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
@@ -342,12 +351,14 @@ impl Processor {
         Ok(())
     }
     //Function to resume solana stream
-    fn process_resume_sol_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_resume_sol_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
-
+        if *pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let now = Clock::get()?.unix_timestamp as u64;
         let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
         // Both sender and receiver can pause / resume stream
@@ -472,6 +483,9 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id {
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -642,6 +656,9 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id {
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -787,11 +804,15 @@ impl Processor {
         Ok(())
     }
     /// Function to pause token streaming
-    fn process_pause_token_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_pause_token_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+
+        if *pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -818,11 +839,15 @@ impl Processor {
         Ok(())
     }
     /// Function to resume token streaming
-    fn process_resume_token_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_resume_token_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
+
+        if *pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
@@ -998,6 +1023,9 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
         let system_program = next_account_info(account_info_iter)?;
 
+        if *withdraw_data.owner != *program_id {
+            return Err(ProgramError::InvalidArgument);
+        }
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -1067,6 +1095,9 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         let system_program = next_account_info(account_info_iter)?; // system program 
 
+        if *withdraw_data.owner != *program_id {
+            return Err(ProgramError::InvalidArgument);
+        }
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -1092,7 +1123,6 @@ impl Processor {
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
         if withdraw_data.data_is_empty(){
-            msg!("hi");
             invoke_signed(
                 &spl_token::instruction::transfer(
                     token_program_info.key,
@@ -1206,6 +1236,7 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; // system program
+
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
         // Since we are performing system_instruction source account must be signer.
@@ -1271,6 +1302,7 @@ impl Processor {
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
         let withdraw_data = next_account_info(account_info_iter)?; // pda data storage
         let system_program = next_account_info(account_info_iter)?; 
+
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -1621,6 +1653,9 @@ impl Processor {
         let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
         let system_program = next_account_info(account_info_iter)?; 
 
+        if *pda_data.owner != *program_id && *pda_data_multisig.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -1678,12 +1713,15 @@ impl Processor {
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_transfer_sol_reject_multisig(accounts: &[AccountInfo]) -> ProgramResult{
+    fn process_transfer_sol_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
         let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
 
+        if *pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -1721,6 +1759,9 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -1821,6 +1862,9 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -1916,7 +1960,7 @@ impl Processor {
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
-
+        
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -2136,7 +2180,7 @@ impl Processor {
         let initiator_account_info = next_account_info(account_info_iter)?; // stream initiator address
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
-
+        
         let escrow = TokenEscrowMultisig::from_account(pda_data)?;
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
         msg!("multisig: {} escrow:{}",multisig_check.multisig_safe,escrow.multisig_safe);
@@ -2184,6 +2228,9 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -2360,6 +2407,9 @@ impl Processor {
         let fee_account = next_account_info(account_info_iter)?;
         let associated_fee_account = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -2515,13 +2565,15 @@ impl Processor {
         Ok(())
     }
     /// Function to pause token streaming
-    fn process_pause_token_multisig_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_pause_token_multisig_stream(program_id: &Pubkey, accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
-
+        if *pda_data.owner != *program_id && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -2561,13 +2613,16 @@ impl Processor {
         Ok(())
     }
     /// Function to resume token streaming
-    fn process_resume_token_multisig_stream(accounts: &[AccountInfo]) -> ProgramResult {
+    fn process_resume_token_multisig_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
         let multisig_pda_data = next_account_info(account_info_iter)?; // multisig pda
 
+        if *pda_data.owner != *program_id && *multisig_pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -2664,6 +2719,9 @@ impl Processor {
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
         let system_program = next_account_info(account_info_iter)?;
 
+        if *pda_data.owner != *program_id && *pda_data_multisig.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2752,12 +2810,15 @@ impl Processor {
         escrow.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
-    fn process_transfer_token_reject_multisig(accounts: &[AccountInfo]) -> ProgramResult{
+    fn process_transfer_token_reject_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data_multisig = next_account_info(account_info_iter)?;  //multisig pda 
         let pda_data = next_account_info(account_info_iter)?; // pda data storage transfer sol multisig
 
+        if *pda_data.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -2816,11 +2877,11 @@ impl Processor {
             }
             TokenInstruction::ProcessPauseSolStream => {
                 msg!("Instruction: Stream pause");
-                Self::process_pause_sol_stream(accounts)
+                Self::process_pause_sol_stream(program_id,accounts)
             }
             TokenInstruction::ProcessResumeSolStream=> {
                 msg!("Instruction: Stream Resume ");
-                Self::process_resume_sol_stream(accounts)
+                Self::process_resume_sol_stream(program_id,accounts)
             }
             TokenInstruction::ProcessTokenWithdrawStream(ProcessTokenWithdrawStream {
                 amount,
@@ -2840,11 +2901,11 @@ impl Processor {
             }
             TokenInstruction::ProcessPauseTokenStream => {
                 msg!("Instruction: Token Stream Pause");
-                Self::process_pause_token_stream(accounts)
+                Self::process_pause_token_stream(program_id,accounts)
             }
             TokenInstruction::ProcessResumeTokenStream => {
                 msg!("Instruction:  Token Stream Resume");
-                Self::process_resume_token_stream(accounts)
+                Self::process_resume_token_stream(program_id,accounts)
             }
             TokenInstruction::ProcessDepositToken(ProcessDepositToken {
                 amount,
@@ -2937,11 +2998,11 @@ impl Processor {
             }
             TokenInstruction::ProcessPauseTokenMultisigStream => {
                 msg!("Instruction: Stream pause");
-                Self::process_pause_token_multisig_stream(accounts)
+                Self::process_pause_token_multisig_stream(program_id,accounts)
             }
             TokenInstruction::ProcessResumeTokenMultisigStream=> {
                 msg!("Instruction: Stream Resume ");
-                Self::process_resume_token_multisig_stream(accounts)
+                Self::process_resume_token_multisig_stream(program_id,accounts)
             }
             TokenInstruction::ProcessRejectTokenMultisigStream=> {
                 msg!("Instruction: Rejecting token stream ");
@@ -2969,11 +3030,11 @@ impl Processor {
             }
             TokenInstruction::ProcessRejectTransferSol => {
                 msg!("Instruction: Rejecting token transfer multisig");
-                Self::process_transfer_sol_reject_multisig(accounts) 
+                Self::process_transfer_sol_reject_multisig(program_id,accounts) 
             }
             TokenInstruction::ProcessRejectTransferToken => {
                 msg!("Instruction: Rejecting token transfer multisig");
-                Self::process_transfer_token_reject_multisig(accounts) 
+                Self::process_transfer_token_reject_multisig(program_id,accounts) 
             }
         }
     }
