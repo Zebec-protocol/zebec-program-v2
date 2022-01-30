@@ -47,6 +47,9 @@ pub enum TokenError {
     // Withdraw more than streamed money
     #[error("Cannot withdraw streaming amount")]
     StreamedAmt,
+    // cannot cancel this transaction
+    #[error("cannot cancel this transaction")]
+    CancelNotAllowed
 }
 impl From<TokenError> for ProgramError {
     fn from(e: TokenError) -> Self {

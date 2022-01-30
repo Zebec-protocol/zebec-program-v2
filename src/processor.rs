@@ -1023,9 +1023,6 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?;  //withdraw data
         let system_program = next_account_info(account_info_iter)?;
 
-        if *withdraw_data.owner != *program_id {
-            return Err(ProgramError::InvalidArgument);
-        }
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -1054,6 +1051,9 @@ impl Processor {
             )?;
         }
         else{
+            if *withdraw_data.owner != *program_id {
+                return Err(ProgramError::InvalidArgument);
+            }
             let allowed_amt = pda.lamports() - amount;
             let withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
             msg!("Your streaming amount is: {}",withdraw_state.amount);
@@ -1095,9 +1095,6 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         let system_program = next_account_info(account_info_iter)?; // system program 
 
-        if *withdraw_data.owner != *program_id {
-            return Err(ProgramError::InvalidArgument);
-        }
         let (account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -1142,6 +1139,9 @@ impl Processor {
             )?;
         }
         else{
+            if *withdraw_data.owner != *program_id {
+                return Err(ProgramError::InvalidArgument);
+            }
             let token_balance = get_token_balance(pda_associated_info);
             let allowed_amt = token_balance.unwrap() - amount;
             let withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
@@ -1290,6 +1290,7 @@ impl Processor {
         escrow.amount = data.amount;
         escrow.signed_by = data.signed_by;
         escrow.multisig_safe = multisig_check.multisig_safe;
+        escrow.can_cancel = data.can_cancel;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
@@ -1367,8 +1368,7 @@ impl Processor {
     }
     fn process_reject_sol_stream_multisig(accounts: &[AccountInfo]) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
-        let source_account_info = next_account_info(account_info_iter)?; // stream initiator address
-        let initiator_account_info = next_account_info(account_info_iter)?; // stream initiator address
+        let source_account_info = next_account_info(account_info_iter)?; // sender
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
 
@@ -1392,8 +1392,8 @@ impl Processor {
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
-        let dest_starting_lamports = initiator_account_info.lamports();
-            **initiator_account_info.lamports.borrow_mut() = dest_starting_lamports
+        let dest_starting_lamports = source_account_info.lamports();
+            **source_account_info.lamports.borrow_mut() = dest_starting_lamports
                 .checked_add(pda_data.lamports())
                 .ok_or(TokenError::Overflow)?;
             **pda_data.lamports.borrow_mut() = 0;
@@ -1876,6 +1876,9 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let mut escrow = EscrowMultisig::from_account(pda_data)?;
+        if escrow.can_cancel == false {
+            return Err(TokenError::CancelNotAllowed.into());
+        }
         let multisig_check = Multisig::from_account(multisig_pda_data)?;
         let (account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
             PREFIXMULTISIG,
@@ -2094,6 +2097,7 @@ impl Processor {
         escrow.token_mint = *token_mint_info.key;
         escrow.signed_by = data.signed_by;
         escrow.multisig_safe = multisig_check.multisig_safe;
+        escrow.can_cancel = data.can_cancel;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
@@ -2180,7 +2184,7 @@ impl Processor {
         let initiator_account_info = next_account_info(account_info_iter)?; // stream initiator address
         let pda_data = next_account_info(account_info_iter)?; // stored data 
         let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
-        
+
         let escrow = TokenEscrowMultisig::from_account(pda_data)?;
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
         msg!("multisig: {} escrow:{}",multisig_check.multisig_safe,escrow.multisig_safe);
@@ -2432,6 +2436,9 @@ impl Processor {
         }
         let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
         let now = Clock::get()?.unix_timestamp as u64;
+        if escrow.can_cancel == false {
+            return Err(TokenError::CancelNotAllowed.into());
+        }
         if escrow.multisig_safe != *pda.key {
             return Err(TokenError::OwnerMismatch.into());
         }
@@ -3058,7 +3065,8 @@ impl PrintProgramError for TokenError {
             TokenError::AlreadyResumed=>msg!("Error: Transaction is not paused"),
             TokenError::StreamAlreadyCreated=>msg!("Stream Already Created"),
             TokenError::StreamNotStarted=>msg!("Stream has not been started"),
-            TokenError::StreamedAmt=>msg!("Cannot withdraw streaming amount")
+            TokenError::StreamedAmt=>msg!("Cannot withdraw streaming amount"),
+            TokenError::CancelNotAllowed=>msg!("cannot cancel this transaction")
         }
     }
 }

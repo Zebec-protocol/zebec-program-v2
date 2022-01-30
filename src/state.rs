@@ -97,7 +97,8 @@ pub struct EscrowMultisig{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub signed_by: Vec<WhiteList>,
-    pub multisig_safe: Pubkey
+    pub multisig_safe: Pubkey,
+    pub can_cancel: bool,
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
@@ -111,7 +112,8 @@ pub struct TokenEscrowMultisig{
     pub recipient: Pubkey,
     pub token_mint: Pubkey,
     pub signed_by: Vec<WhiteList>,
-    pub multisig_safe: Pubkey
+    pub multisig_safe: Pubkey,
+    pub can_cancel: bool,
 }
 impl TokenEscrowMultisig {
     pub fn from_account(account:&AccountInfo)-> Result<TokenEscrowMultisig, ProgramError> {
@@ -144,7 +146,7 @@ pub struct SolTransfer{
     pub recipient: Pubkey,
     pub signed_by: Vec<WhiteList>,
     pub multisig_safe: Pubkey,
-    pub amount : u64
+    pub amount : u64,
 }
 impl SolTransfer {
     pub fn from_account(account:&AccountInfo)-> Result<SolTransfer, ProgramError> {
