@@ -2121,6 +2121,9 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?; // Program pda to store withdraw data
         let system_program = next_account_info(account_info_iter)?; 
 
+        if *pda_data.owner != *program_id && *pda_data_multisig.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
