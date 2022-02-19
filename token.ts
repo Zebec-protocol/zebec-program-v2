@@ -25,9 +25,9 @@ async function findAssociatedTokenAddress(
 
 async function main() {
     const wallet: PublicKey = new PublicKey(
-        'ErAykG8kXqpAjGGWbZ9BuQMq7j5SEk9fhrXV8JRpysx4') // sender/recipient address
+        'BRywkBvwea9Szf41YY1rsRKeBVxjxe7aoFPX5d2bRiVD') // sender/recipient address
     const wallet2: PublicKey = new PublicKey(
-            '2ibSirDWk5P68ZKmQQSxUMtiWQFRuanpPfMfaYzxgSRv'); //token address
+            '7ZJvFw9M7kQh2evUyAGTdKVyucZjb51yLxPXExaBMERy'); //token address
     console.log( await (await findAssociatedTokenAddress(wallet,wallet2)).toBase58()) //
 
     
@@ -56,4 +56,4 @@ async function pda_seed() {
 }
 
 main()
-pda_seed()
+// pda_seed()

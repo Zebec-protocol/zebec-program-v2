@@ -38,7 +38,7 @@ pub struct TokenEscrow{
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
-    pub token_mint: Pubkey
+    pub token_mint: Pubkey,
 }
 impl TokenEscrow {
     pub fn allowed_amt(&self, now: u64) -> u64 {

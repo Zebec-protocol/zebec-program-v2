@@ -199,6 +199,7 @@ impl Processor {
         ];
         let comission: u64 = 25*amount/10000; 
         let receiver_amount:u64=amount-comission;
+        
         create_transfer(
             pda,
             fee_account,
@@ -1307,6 +1308,9 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        if *pda_data.owner != *program_id && *pda_data_multisig.owner != *program_id{
+            return Err(ProgramError::InvalidArgument);
+        }
         let multisig_check = Multisig::from_account(pda_data_multisig)?;
         let mut k = 0; 
         for i in 0..multisig_check.signers.len(){
@@ -1344,6 +1348,10 @@ impl Processor {
             &[bump_seed],
         ];
         assert_keys_equal(*withdraw_data.key,account_address )?;
+        
+        if  escrow.signed_by.len() >= multisig_check.m.into() {
+            escrow.paused = 0;
+        }
         if withdraw_data.data_is_empty(){
             create_pda_account_signed(
                 source_account_info,
@@ -1355,8 +1363,10 @@ impl Processor {
                 withdraw_data_signer_seeds
             )?;
         }
-        if  escrow.signed_by.len() >= multisig_check.m.into() {
-            escrow.paused = 0;
+        else{
+            if *withdraw_data.owner != *program_id {
+                return Err(ProgramError::InvalidArgument);
+            }
             let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
             withdraw_state.amount += escrow.amount;
             withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
@@ -2156,6 +2166,10 @@ impl Processor {
             &[bump_seed],
         ];
         let rent = Rent::get()?; 
+       
+        if  escrow.signed_by.len() >= multisig_check.m.into() {
+            escrow.paused = 0;
+        }
         if withdraw_data.data_is_empty(){
             create_pda_account_signed(
                 source_account_info,
@@ -2167,8 +2181,10 @@ impl Processor {
                 withdraw_data_signer_seeds
             )?;
         }
-        if  escrow.signed_by.len() >= multisig_check.m.into() {
-            escrow.paused = 0;
+        else{
+            if *withdraw_data.owner != *program_id {
+                return Err(ProgramError::InvalidArgument);
+            }
             let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
             withdraw_state.amount += escrow.amount;
             withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
