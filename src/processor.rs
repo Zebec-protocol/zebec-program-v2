@@ -2163,9 +2163,6 @@ impl Processor {
         if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
             return Err(ProgramError::InvalidArgument);
         }
-        if pda_data.data_len() != 523 {
-            Self::process_sol_withdraw_stream_multisig_deprecated(program_id,accounts,amount)?;
-        }
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -2828,9 +2825,7 @@ impl Processor {
         if *pda_data.owner != *program_id && *withdraw_data.owner != *program_id  && *multisig_pda_data.owner != *program_id{
             return Err(ProgramError::InvalidArgument);
         }
-        if pda_data.data_len() != 800 {
-            Self::process_token_withdraw_multisig_stream_deprecated(program_id,accounts,amount)?;
-        }
+        
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -3581,7 +3576,13 @@ impl Processor {
             }
             TokenInstruction::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{
                 amount}) =>{
-                    Self::process_sol_withdraw_stream_multisig(program_id,accounts,amount) 
+                    let pda_data = &accounts[3];// Program pda to store data
+                    if pda_data.data_len() != 523 {
+                        Self::process_sol_withdraw_stream_multisig_deprecated(program_id,accounts,amount)
+                    }
+                    else {
+                        Self::process_sol_withdraw_stream_multisig(program_id,accounts,amount) 
+                    }
                 }
             TokenInstruction::ProcessSolCancelStreamMultisig => {
                 msg!("Instruction: Multisig Sol Cancel");
@@ -3606,7 +3607,13 @@ impl Processor {
             TokenInstruction::ProcessTokenWithdrawStreamMultisig (ProcessTokenWithdrawStreamMultisig{
                 amount}) =>{
                     msg!("Instruction: Withdraw Token MultiSig");
-                    Self::process_token_withdraw_multisig_stream(program_id,accounts,amount) 
+                    let pda_data = &accounts[4];// Program pda to store data
+                    if pda_data.data_len() != 800 {
+                        Self::process_token_withdraw_multisig_stream_deprecated(program_id,accounts,amount)
+                    }
+                    else {
+                        Self::process_token_withdraw_multisig_stream(program_id,accounts,amount) 
+                    }
                 }
             TokenInstruction::ProcessTokenCancelStreamMultisig => {
                 msg!("Instruction: Multisig Token Cancel");
