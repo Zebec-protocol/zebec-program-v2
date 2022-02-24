@@ -66,17 +66,17 @@ impl Processor {
         let system_program = next_account_info(account_info_iter)?; // system program
         // Get the rent sysvar via syscall
         let rent = Rent::get()?; //
-        // Since we are performing system_instruction source account must be signer.
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
         if now > end_time{
-            msg!("End time is already passed Now:{} End_time:{}",now,end_time);
             return Err(TokenError::TimeEnd.into());
         }
-
+        if start_time > end_time {
+            return Err(TokenError::InvalidInstruction.into());
+        }
         assert_keys_equal(system_program::id(), *system_program.key)?;
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
@@ -134,7 +134,6 @@ impl Processor {
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.withdrawn = 0 ;
-        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -314,7 +313,6 @@ impl Processor {
             pda_signer_seeds
         )?;
         if escrow.paused == 1{
-            msg!("{}{}",escrow.withdraw_limit,amount);
             escrow.withdraw_limit -= amount;
         }
         escrow.withdrawn += amount;
@@ -363,7 +361,7 @@ impl Processor {
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
-        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = Stream::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         // Amount that recipient should receive.  
         let mut allowed_amt = escrow.allowed_amt(now);
@@ -428,12 +426,14 @@ impl Processor {
         if *pda_data.owner != *program_id {
             return Err(ProgramError::InvalidArgument);
         }
-        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = Stream::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
-            msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
+        }
+        if now > escrow.start_time{
+            return Err(TokenError::StreamNotStarted.into());
         }
         // Both sender and receiver can pause / resume stream
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
@@ -461,7 +461,7 @@ impl Processor {
             return Err(ProgramError::InvalidArgument);
         }
         let now = Clock::get()?.unix_timestamp as u64;
-        let mut escrow = Escrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = Stream::try_from_slice(&pda_data.data.borrow())?;
         // Both sender and receiver can pause / resume stream
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
             return Err(ProgramError::MissingRequiredSignature); 
@@ -501,6 +501,9 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64; 
         if now > end_time{
             return Err(TokenError::TimeEnd.into());
+        }
+        if start_time > end_time {
+            return Err(TokenError::InvalidInstruction.into());
         }
         let space_size = std::mem::size_of::<StreamToken>();
 
@@ -949,7 +952,7 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = StreamToken::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
 
         // Amount that recipient should receive.  
@@ -1096,12 +1099,14 @@ impl Processor {
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
-        let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = StreamToken::try_from_slice(&pda_data.data.borrow())?;
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
-            msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
+        }
+        if now > escrow.start_time{
+            return Err(TokenError::StreamNotStarted.into());
         }
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
@@ -1132,7 +1137,7 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let now = Clock::get()?.unix_timestamp as u64;
-        let mut escrow = TokenEscrow::try_from_slice(&pda_data.data.borrow())?;
+        let mut escrow = StreamToken::try_from_slice(&pda_data.data.borrow())?;
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
         }
@@ -1535,8 +1540,10 @@ impl Processor {
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
         if now > data.end_time{
-            msg!("End time is already passed Now:{} End_time:{}",now,data.end_time);
             return Err(TokenError::TimeEnd.into());
+        }
+        if data.start_time > data.end_time {
+            return Err(TokenError::InvalidInstruction.into());
         }
         assert_keys_equal(system_program::id(), *system_program.key)?;
         if !pda_data.data_is_empty(){
@@ -2277,7 +2284,7 @@ impl Processor {
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
-        let mut escrow = EscrowMultisig::from_account(pda_data)?;
+        let mut escrow = StreamMultisig::from_account(pda_data)?;
         if escrow.can_cancel == false {
             return Err(TokenError::CancelNotAllowed.into());
         }
@@ -2376,15 +2383,17 @@ impl Processor {
         if k == multisig_check.signers.len(){
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = EscrowMultisig::from_account(pda_data)?;
+        let mut escrow = StreamMultisig::from_account(pda_data)?;
         if multisig_check.multisig_safe != escrow.multisig_safe{
             return Err(TokenError::OwnerMismatch.into());
         }
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
-            msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
+        }
+        if now > escrow.start_time{
+            return Err(TokenError::StreamNotStarted.into());
         }
         // Both sender and receiver can pause / resume stream
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
@@ -2418,7 +2427,7 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let now = Clock::get()?.unix_timestamp as u64;
-        let mut escrow = EscrowMultisig::from_account(pda_data)?;
+        let mut escrow = StreamMultisig::from_account(pda_data)?;
         // Both sender and receiver can pause / resume stream
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
             return Err(ProgramError::MissingRequiredSignature); 
@@ -2457,6 +2466,9 @@ impl Processor {
         let now = Clock::get()?.unix_timestamp as u64; 
         if now > data.end_time{
             return Err(TokenError::TimeEnd.into());
+        }
+        if data.start_time > data.end_time {
+            return Err(TokenError::InvalidInstruction.into());
         }
         if !pda_data.data_is_empty(){
             return Err(TokenError::StreamAlreadyCreated.into());
@@ -3025,7 +3037,7 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
-        let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
         let now = Clock::get()?.unix_timestamp as u64;
         if escrow.can_cancel == false {
             return Err(TokenError::CancelNotAllowed.into());
@@ -3185,15 +3197,17 @@ impl Processor {
         if pda_data.data_is_empty(){
             return Err(ProgramError::UninitializedAccount);
         }
-        let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
         if multisig_check.multisig_safe != escrow.multisig_safe{
             return Err(TokenError::OwnerMismatch.into());
         }
         let now = Clock::get()?.unix_timestamp as u64;
         let allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
-            msg!("End time is already passed");
             return Err(TokenError::TimeEnd.into());
+        }
+        if now > escrow.start_time{
+            return Err(TokenError::StreamNotStarted.into());
         }
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
@@ -3235,7 +3249,7 @@ impl Processor {
             return Err(ProgramError::UninitializedAccount);
         }
         let now = Clock::get()?.unix_timestamp as u64;
-        let mut escrow = TokenEscrowMultisig::from_account(pda_data)?;
+        let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
         if multisig_check.multisig_safe != escrow.multisig_safe{
             return Err(TokenError::OwnerMismatch.into());
         }

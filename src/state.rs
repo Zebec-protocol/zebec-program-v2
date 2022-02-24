@@ -42,7 +42,7 @@ impl Stream {
     pub fn allowed_amt(&self, now: u64) -> u64 {
         (
         ((now - self.start_time) as f64) / ((self.end_time - self.start_time) as f64) * self.amount as f64
-        ) as u64 
+        ) as u64
     }
 }
 #[repr(C)]
