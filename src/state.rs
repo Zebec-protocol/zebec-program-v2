@@ -36,7 +36,8 @@ pub struct Stream{
     pub amount: u64,
     pub sender:   Pubkey,
     pub recipient: Pubkey,
-    pub withdrawn: u64
+    pub withdrawn: u64,
+    pub paused_at: u64
 }
 impl Stream {
     pub fn allowed_amt(&self, now: u64) -> u64 {
@@ -76,7 +77,8 @@ pub struct StreamToken{
     pub sender:   Pubkey,
     pub recipient: Pubkey,
     pub token_mint: Pubkey,
-    pub withdrawn: u64
+    pub withdrawn: u64,
+    pub paused_at: u64,
 }
 impl StreamToken {
     pub fn allowed_amt(&self, now: u64) -> u64 {
@@ -151,7 +153,8 @@ pub struct StreamMultisig{
     pub signed_by: Vec<WhiteList>,
     pub multisig_safe: Pubkey,
     pub can_cancel: bool,
-    pub withdrawn: u64
+    pub withdrawn: u64,
+    pub paused_at: u64,
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
@@ -182,7 +185,8 @@ pub struct TokenStreamMultisig{
     pub signed_by: Vec<WhiteList>,
     pub multisig_safe: Pubkey,
     pub can_cancel: bool,
-    pub withdrawn: u64
+    pub withdrawn: u64,
+    pub paused_at: u64,
 }
 impl TokenEscrowMultisig {
     pub fn from_account(account:&AccountInfo)-> Result<TokenEscrowMultisig, ProgramError> {

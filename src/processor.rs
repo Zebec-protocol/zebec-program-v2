@@ -134,6 +134,7 @@ impl Processor {
         escrow.recipient = *dest_account_info.key;
         escrow.amount = amount;
         escrow.withdrawn = 0 ;
+        escrow.paused_at = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -432,7 +433,7 @@ impl Processor {
         if now >= escrow.end_time {
             return Err(TokenError::TimeEnd.into());
         }
-        if now > escrow.start_time{
+        if now < escrow.start_time{
             return Err(TokenError::StreamNotStarted.into());
         }
         // Both sender and receiver can pause / resume stream
@@ -448,6 +449,7 @@ impl Processor {
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
+        escrow.paused_at = now;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -472,8 +474,11 @@ impl Processor {
         if escrow.paused ==0{
             return Err(TokenError::AlreadyResumed.into());
         }
+        let time_spent = now - escrow.paused_at;
         escrow.paused = 0;
-        escrow.start_time =  now;
+        escrow.start_time += time_spent;
+        escrow.end_time += time_spent;
+        escrow.paused_at = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -566,6 +571,7 @@ impl Processor {
         escrow.amount = amount;
         escrow.token_mint = *token_mint_info.key;
         escrow.withdrawn = 0;
+        escrow.paused_at = 0;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         msg!("{}",pda_data.data_len());
@@ -1105,7 +1111,7 @@ impl Processor {
         if now >= escrow.end_time {
             return Err(TokenError::TimeEnd.into());
         }
-        if now > escrow.start_time{
+        if now < escrow.start_time{
             return Err(TokenError::StreamNotStarted.into());
         }
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
@@ -1120,6 +1126,7 @@ impl Processor {
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
+        escrow.paused_at = now;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -1147,8 +1154,11 @@ impl Processor {
         if escrow.paused ==0{
             return Err(TokenError::AlreadyResumed.into());
         }
+        let time_spent = now - escrow.paused_at;
         escrow.paused = 0;
-        escrow.start_time =  now;
+        escrow.start_time += time_spent;
+        escrow.end_time += time_spent;
+        escrow.paused_at = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -1587,6 +1597,7 @@ impl Processor {
         escrow.signed_by = data.signed_by;
         escrow.multisig_safe = multisig_check.multisig_safe;
         escrow.can_cancel = data.can_cancel;
+        escrow.paused_at = 0;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut *pda_data_multisig.data.borrow_mut())?;
@@ -2392,7 +2403,7 @@ impl Processor {
         if now >= escrow.end_time {
             return Err(TokenError::TimeEnd.into());
         }
-        if now > escrow.start_time{
+        if now < escrow.start_time{
             return Err(TokenError::StreamNotStarted.into());
         }
         // Both sender and receiver can pause / resume stream
@@ -2405,6 +2416,7 @@ impl Processor {
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
+        escrow.paused_at = now;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -2438,8 +2450,11 @@ impl Processor {
         if escrow.paused ==0{
             return Err(TokenError::AlreadyResumed.into());
         }
+        let time_spent = now - escrow.paused_at;
         escrow.paused = 0;
-        escrow.start_time =  now;
+        escrow.start_time += time_spent;
+        escrow.end_time += time_spent;
+        escrow.paused_at = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -2513,6 +2528,7 @@ impl Processor {
         escrow.multisig_safe = multisig_check.multisig_safe;
         escrow.can_cancel = data.can_cancel;
         escrow.withdrawn = 0;
+        escrow.paused_at = 0;
         msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
@@ -3206,7 +3222,7 @@ impl Processor {
         if now >= escrow.end_time {
             return Err(TokenError::TimeEnd.into());
         }
-        if now > escrow.start_time{
+        if now < escrow.start_time{
             return Err(TokenError::StreamNotStarted.into());
         }
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
@@ -3221,6 +3237,7 @@ impl Processor {
         }
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
+        escrow.paused_at = now;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -3262,8 +3279,11 @@ impl Processor {
         if escrow.paused ==0{
             return Err(TokenError::AlreadyResumed.into());
         }
+        let time_spent = now - escrow.paused_at;
         escrow.paused = 0;
-        escrow.start_time =  now;
+        escrow.start_time += time_spent;
+        escrow.end_time += time_spent;
+        escrow.paused_at = 0;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
