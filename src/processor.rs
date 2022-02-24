@@ -245,7 +245,6 @@ impl Processor {
         let withdraw_data = next_account_info(account_info_iter)?; // withdraw data 
         let system_program = next_account_info(account_info_iter)?; // system program id 
         let fee_account =  next_account_info(account_info_iter)?; // 0.25 fee account
-        
         let fee_receiver= &Pubkey::from_str("EsDV3m3xUZ7g8QKa1kFdbZT18nNz8ddGJRcTK84WDQ7k").unwrap();
         if fee_account.key != fee_receiver {
             return Err(TokenError::OwnerMismatch.into());
@@ -3494,7 +3493,7 @@ impl Processor {
             }) => {
                 msg!("Instruction: Sol Withdraw");
                 let pda_data = &accounts[3];// Program pda to store data
-                if pda_data.data_len() != 112 {
+                if pda_data.data_len() != 120 {
                     Self::process_sol_withdraw_stream_deprecated(program_id,accounts,amount)
                 }
                 else{
@@ -3527,7 +3526,7 @@ impl Processor {
             }) => {
                 msg!("Instruction: Token Withdraw");
                 let pda_data = &accounts[3];// Program pda to store data
-                if pda_data.data_len() != 144 {
+                if pda_data.data_len() != 152 {
                     Self::process_token_withdraw_stream_deprecated(program_id,accounts,amount)
                 }
                 else{
@@ -3611,7 +3610,7 @@ impl Processor {
             TokenInstruction::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{
                 amount}) =>{
                     let pda_data = &accounts[3];// Program pda to store data
-                    if pda_data.data_len() != 523 {
+                    if pda_data.data_len() != 531 {
                         Self::process_sol_withdraw_stream_multisig_deprecated(program_id,accounts,amount)
                     }
                     else {
@@ -3642,7 +3641,7 @@ impl Processor {
                 amount}) =>{
                     msg!("Instruction: Withdraw Token MultiSig");
                     let pda_data = &accounts[4];// Program pda to store data
-                    if pda_data.data_len() != 800 {
+                    if pda_data.data_len() != 808 {
                         Self::process_token_withdraw_multisig_stream_deprecated(program_id,accounts,amount)
                     }
                     else {
