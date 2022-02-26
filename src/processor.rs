@@ -1339,6 +1339,12 @@ impl Processor {
         if !source_account_info.is_signer {
             return Err(ProgramError::MissingRequiredSignature); 
         }
+        let (withdraw_account_address, _bump_seed) = get_withdraw_data_and_bump_seed(
+            PREFIX,
+            source_account_info.key,
+            program_id,
+        );
+        assert_keys_equal(*withdraw_data.key,withdraw_account_address )?;
         if withdraw_data.data_is_empty(){
             invoke_signed(
                 &solana_program::system_instruction::transfer(
