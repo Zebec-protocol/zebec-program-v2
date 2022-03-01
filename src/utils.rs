@@ -100,25 +100,6 @@ pub fn create_transfer<'a>(
     )
 }
 
-pub fn create_transfer_unsigned<'a>(
-    sender: &AccountInfo<'a>,
-    receiver: &AccountInfo<'a>,
-    system_program: &AccountInfo<'a>,
-    amount: u64,
-) -> ProgramResult {
-    invoke(
-        &system_instruction::transfer(
-            sender.key,
-            receiver.key,
-            amount
-        ),
-        &[
-            sender.clone(),
-            receiver.clone(),
-            system_program.clone()
-        ],
-    )
-}
 pub fn get_withdraw_data_and_bump_seed(
     prefix: &str,
     sender: &Pubkey,

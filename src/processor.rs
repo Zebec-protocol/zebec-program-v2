@@ -7,10 +7,9 @@ use solana_program::{
     entrypoint::ProgramResult,
     program::{invoke,invoke_signed},
     pubkey::Pubkey,
-    sysvar::{rent::Rent,fees::Fees,clock::Clock,Sysvar},
+    sysvar::{rent::Rent,clock::Clock,Sysvar},
     msg,
     system_program,
-    fee_calculator::FeeCalculator
 };
 use num_traits::FromPrimitive;
 use crate::{
@@ -38,7 +37,6 @@ use crate::{
         create_pda_account,
         get_master_address_and_bump_seed,
         create_transfer,
-        create_transfer_unsigned,
         get_withdraw_data_and_bump_seed,
         create_pda_account_signed,
         get_multisig_data_and_bump_seed,
@@ -110,7 +108,6 @@ impl Processor {
 
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<Stream>());
         // Sending transaction fee to recipient. So, he can withdraw the streamed fund
-        let fees = Fees::get()?;
         create_pda_account( 
             source_account_info,
             transfer_amount,
@@ -118,12 +115,6 @@ impl Processor {
             program_id,
             system_program,
             pda_data
-        )?;
-        create_transfer_unsigned(
-            source_account_info,
-            dest_account_info,
-            system_program,
-            fees.fee_calculator.lamports_per_signature * 2,
         )?;
         let mut escrow = Stream::try_from_slice(&pda_data.data.borrow())?;
         escrow.start_time = start_time;
@@ -552,13 +543,6 @@ impl Processor {
             program_id,
             system_program,
             pda_data
-        )?;
-        let fees = Fees::get()?;
-        create_transfer_unsigned(
-            source_account_info,
-            dest_account_info,
-            system_program,
-            fees.fee_calculator.lamports_per_signature * 2,
         )?;
         let mut escrow = StreamToken::try_from_slice(&pda_data.data.borrow())?;
         escrow.start_time = start_time;
@@ -1575,8 +1559,6 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let transfer_amount =  rent.minimum_balance(std::mem::size_of::<StreamMultisig>()+355);
-        // Sending transaction fee to recipient. So, he can withdraw the streamed fund
-        let fees = Fees::get()?;
         create_pda_account( 
             source_account_info,
             transfer_amount,
@@ -1584,12 +1566,6 @@ impl Processor {
             program_id,
             system_program,
             pda_data
-        )?;
-        create_transfer_unsigned(
-            source_account_info,
-            dest_account_info,
-            system_program,
-            fees.fee_calculator.lamports_per_signature * 2,
         )?;
         let mut escrow = StreamMultisig::from_account(pda_data)?;
         escrow.start_time = data.start_time;
@@ -1885,6 +1861,7 @@ impl Processor {
         else{
             let allowed_amt = pda.lamports() - amount;
             let withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
+            msg!("Your streaming amount is: {}",withdraw_state.amount);
             if allowed_amt < withdraw_state.amount {
                 return Err(TokenError::StreamedAmt.into()); 
             }
@@ -2511,13 +2488,6 @@ impl Processor {
             program_id,
             system_program,
             pda_data
-        )?;
-        let fees = Fees::get()?;
-        create_transfer_unsigned(
-            source_account_info,
-            dest_account_info,
-            system_program,
-            fees.fee_calculator.lamports_per_signature * 2,
         )?;
 
         let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
