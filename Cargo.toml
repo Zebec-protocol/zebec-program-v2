@@ -1,6 +1,6 @@
 cargo-features = ["edition2021"]
 [package]
-name = "zebecv2"
+name = "zebec"
 version = "2.1.1"
 edition = "2018"
 

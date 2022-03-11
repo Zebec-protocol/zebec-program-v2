@@ -366,7 +366,6 @@ impl Processor {
         if *source_account_info.key != escrow.sender {
             return Err(TokenError::OwnerMismatch.into());
         }
-        let dest_account_amount = escrow.amount-allowed_amt;
         let (_account_address, bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -375,8 +374,8 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
-        let comission: u64 = 25*dest_account_amount/10000; 
-        let receiver_amount:u64=dest_account_amount-comission;
+        let comission: u64 = 25*allowed_amt/10000; 
+        let receiver_amount:u64=allowed_amt-comission;
         create_transfer(
             pda,
             fee_account,
@@ -957,8 +956,6 @@ impl Processor {
         if *source_account_info.key != escrow.sender {
             return Err(TokenError::OwnerMismatch.into());
         }
-        let dest_account_amount = escrow.amount-allowed_amt;
-
         assert_keys_equal(*token_mint_info.key, escrow.token_mint)?;
 
         let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,&escrow.token_mint);
@@ -1016,8 +1013,8 @@ impl Processor {
                 ]
             )?
         }
-        let comission: u64 = 25*dest_account_amount/10000; 
-        let receiver_amount:u64=dest_account_amount-comission;
+        let comission: u64 = 25*allowed_amt/10000; 
+        let receiver_amount:u64=allowed_amt-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -2315,7 +2312,6 @@ impl Processor {
         if escrow.multisig_safe != *pda.key {
             return Err(TokenError::OwnerMismatch.into());
         }
-        let dest_account_amount = escrow.amount-allowed_amt;
         let (_account_address_multisig, bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             multisig_pda_data.key,
@@ -2326,8 +2322,8 @@ impl Processor {
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed_multisig],
         ];
-        let comission: u64 = 25*dest_account_amount/10000; 
-        let receiver_amount:u64=dest_account_amount-comission;
+        let comission: u64 = 25*allowed_amt/10000; 
+        let receiver_amount:u64=allowed_amt-comission;
         create_transfer(
             pda,
             fee_account,
@@ -3046,7 +3042,6 @@ impl Processor {
             msg!("Stream already completed");
             return Err(TokenError::TimeEnd.into());
         }
-        let dest_account_amount = escrow.amount-allowed_amt;
         assert_keys_equal(*token_mint_info.key, escrow.token_mint)?;
 
         let receiver_associated_account_check = get_associated_token_address(dest_account_info.key,&escrow.token_mint);
@@ -3106,8 +3101,8 @@ impl Processor {
                 ]
             )?
         }
-        let comission: u64 = 25*dest_account_amount/10000; 
-        let receiver_amount:u64=dest_account_amount-comission;
+        let comission: u64 = 25*allowed_amt/10000; 
+        let receiver_amount:u64=allowed_amt-comission;
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
