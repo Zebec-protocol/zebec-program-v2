@@ -89,9 +89,7 @@ pub enum TokenInstruction {
     },
     ProcessSwapSol(ProcessSwapSol),
     ProcessSwapToken(ProcessSwapToken),
-    SignedBy{
-        whitelist_v2:WhiteList
-    },
+    SignedBy,
     ProcessSolMultiSigStream{whitelist_v3:EscrowMultisig},
     ProcessSolWithdrawStreamMultisig(ProcessSolWithdrawStreamMultisig),
     ProcessSolCancelStreamMultisig,
@@ -104,17 +102,11 @@ pub enum TokenInstruction {
     ProcessPauseTokenMultisigStream,
     ProcessResumeTokenMultisigStream,
     ProcessRejectTokenMultisigStream,
-    SignedByToken{
-        whitelist_v4:WhiteList
-    },
+    SignedByToken,
     ProcessSolTransfer{whitelist_v3:SolTransfer},
-    SignedByTransferSol{
-        whitelist_v4:WhiteList
-    },
+    SignedByTransferSol,
     ProcessTokenTransfer{whitelist_v3:TokenTransfer},
-    SignedByTransferToken{
-        whitelist_v4:WhiteList
-    },
+    SignedByTransferToken,
     ProcessRejectTransferSol,
     ProcessRejectTransferToken
 }
@@ -222,7 +214,7 @@ impl TokenInstruction {
                 Self::ProcessSwapToken(ProcessSwapToken{amount})
             },
             19 =>{
-                Self::SignedBy{whitelist_v2:WhiteList::try_from_slice(rest)?}
+                Self::SignedBy
             }
             20 => {
                 Self::ProcessSolMultiSigStream{whitelist_v3:EscrowMultisig::try_from_slice(rest)?}
@@ -265,19 +257,19 @@ impl TokenInstruction {
                 Self:: ProcessRejectTokenMultisigStream
             }
             32 =>{
-                Self::SignedByToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
+                Self::SignedByToken
             }
             33 =>{
                 Self::ProcessSolTransfer{whitelist_v3:SolTransfer::try_from_slice(rest)?}
             }
             34 => {
-                Self::SignedByTransferSol{whitelist_v4:WhiteList::try_from_slice(rest)?}
+                Self::SignedByTransferSol
             }
             35 =>{
                 Self::ProcessTokenTransfer{whitelist_v3:TokenTransfer::try_from_slice(rest)?}
             }
             36 => {
-                Self::SignedByTransferToken{whitelist_v4:WhiteList::try_from_slice(rest)?}
+                Self::SignedByTransferToken
             }
             37 =>{
                 Self::ProcessRejectTransferSol

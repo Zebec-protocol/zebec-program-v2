@@ -5,6 +5,7 @@ use solana_program::{
     program_error::{ProgramError},
     account_info:: AccountInfo,
     borsh::try_from_slice_unchecked,
+    program_option::COption,
 };
 
 #[repr(C)]
@@ -113,11 +114,7 @@ pub struct WhiteList{
     pub address: Pubkey,
     pub counter:u8,
 }
-/// Check is a token state is initialized
-pub trait IsInitialized {
-    /// Is initialized
-    fn is_initialized(&self) -> bool;
-}
+
 impl Multisig {
     pub fn from_account(account:&AccountInfo)-> Result<Multisig, ProgramError> {
             let md: Multisig =try_from_slice_unchecked(&account.data.borrow_mut())?;

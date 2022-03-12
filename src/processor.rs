@@ -1582,7 +1582,7 @@ impl Processor {
         msg!("{}",pda_data.data_len());
         Ok(())
     }
-    fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_sign_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
@@ -1612,6 +1612,10 @@ impl Processor {
         if now > escrow.start_time {
             return Err(TokenError::TimeEnd.into());
         }
+        let signed_by = WhiteList {
+            address: *source_account_info.key,
+            counter:0
+        };
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
                 n += 1;
@@ -1620,6 +1624,7 @@ impl Processor {
         if n > 0{
             return Err(TokenError::PublicKeyMismatch.into()); 
         }
+        msg!("{:?}",signed_by);
         escrow.signed_by.push(signed_by);
         let rent = Rent::get()?; 
         let (account_address, bump_seed) = get_withdraw_data_and_bump_seed(
@@ -1940,7 +1945,7 @@ impl Processor {
 
         Ok(())
     }
-    fn process_transfer_sol_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_transfer_sol_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?;  //receiver
@@ -1970,6 +1975,10 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }  
         let mut n = 0; 
+        let signed_by = WhiteList {
+            address: *source_account_info.key,
+            counter:0
+        };
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
                 n += 1;
@@ -2505,7 +2514,7 @@ impl Processor {
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_sign_token_stream(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_sign_token_stream(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let pda_data = next_account_info(account_info_iter)?; // pda data storage
@@ -2535,6 +2544,10 @@ impl Processor {
         if now > escrow.start_time {
             return Err(TokenError::TimeEnd.into());
         }
+        let signed_by = WhiteList {
+            address: *source_account_info.key,
+            counter:0
+        };
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
                 n += 1;
@@ -3306,7 +3319,7 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    fn process_transfer_token_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo],signed_by: WhiteList) -> ProgramResult{
+    fn process_transfer_token_sign_multisig(program_id: &Pubkey,accounts: &[AccountInfo]) -> ProgramResult{
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
         let dest_account_info = next_account_info(account_info_iter)?;  //receiver
@@ -3339,6 +3352,10 @@ impl Processor {
         }
         let mut escrow = TokenTransfer::from_account(pda_data)?;
         let mut n = 0; 
+        let signed_by = WhiteList {
+            address: *source_account_info.key,
+            counter:0
+        };
         for i in 0..escrow.signed_by.len(){
             if escrow.signed_by[i].address == signed_by.address {
                 n += 1;
@@ -3570,9 +3587,9 @@ impl Processor {
                 msg!("Instruction: Swapping token");
                 Self::process_swap_token(program_id,accounts,amount) 
             }
-            TokenInstruction::SignedBy{whitelist_v2} => {
+            TokenInstruction::SignedBy => {
                 msg!("Instruction: Signning multisig");
-                Self::process_sign_stream(program_id,accounts,whitelist_v2) 
+                Self::process_sign_stream(program_id,accounts) 
             }
             TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
                 msg!("Instruction: Streaming MultiSig");
@@ -3635,25 +3652,25 @@ impl Processor {
                 msg!("Instruction: Rejecting token stream ");
                 Self::process_reject_token_stream_multisig(accounts)
             }
-            TokenInstruction::SignedByToken{whitelist_v4} => {
+            TokenInstruction::SignedByToken => {
                 msg!("Instruction: Signning token multisig");
-                Self::process_sign_token_stream(program_id,accounts,whitelist_v4) 
+                Self::process_sign_token_stream(program_id,accounts) 
             }
             TokenInstruction::ProcessSolTransfer{whitelist_v3} => {
                 msg!("Instruction: Initiating Sol transfer multisig");
                 Self::process_trasfer_sol_multisig(program_id,accounts,whitelist_v3) 
             }
-            TokenInstruction::SignedByTransferSol{whitelist_v4} => {
+            TokenInstruction::SignedByTransferSol => {
                 msg!("Instruction: Signning Sol transfer multisig");
-                Self::process_transfer_sol_sign_multisig(program_id,accounts,whitelist_v4) 
+                Self::process_transfer_sol_sign_multisig(program_id,accounts) 
             }
             TokenInstruction::ProcessTokenTransfer{whitelist_v3} => {
                 msg!("Instruction: Initiating token transfer multisig");
                 Self::process_trasfer_token_multisig(program_id,accounts,whitelist_v3) 
             }
-            TokenInstruction::SignedByTransferToken{whitelist_v4} => {
+            TokenInstruction::SignedByTransferToken => {
                 msg!("Instruction: Signning token transfer multisig");
-                Self::process_transfer_token_sign_multisig(program_id,accounts,whitelist_v4) 
+                Self::process_transfer_token_sign_multisig(program_id,accounts) 
             }
             TokenInstruction::ProcessRejectTransferSol => {
                 msg!("Instruction: Rejecting token transfer multisig");
