@@ -5,7 +5,6 @@ use solana_program::{
     program_error::{ProgramError},
     account_info:: AccountInfo,
     borsh::try_from_slice_unchecked,
-    program_option::COption,
 };
 
 #[repr(C)]

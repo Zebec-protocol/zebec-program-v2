@@ -361,7 +361,7 @@ impl Processor {
             return Err(TokenError::StreamNotStarted.into());
         }
         if now < escrow.start_time {
-            allowed_amt = escrow.amount;
+            allowed_amt = 0;
         }
         if *source_account_info.key != escrow.sender {
             return Err(TokenError::OwnerMismatch.into());
@@ -947,7 +947,7 @@ impl Processor {
         let mut allowed_amt = escrow.allowed_amt(now);
 
         if now < escrow.start_time {
-            allowed_amt = escrow.amount;
+            allowed_amt = 0;
         }
         if now >= escrow.end_time {
             msg!("Stream already completed");
@@ -2311,7 +2311,7 @@ impl Processor {
             return Err(TokenError::StreamNotStarted.into());
         }
         if now < escrow.start_time {
-            allowed_amt = escrow.amount;
+            allowed_amt = 0;
         }
         // if *source_account_info.key != escrow.sender {
         //     return Err(TokenError::OwnerMismatch.into());
@@ -3049,7 +3049,7 @@ impl Processor {
         let mut allowed_amt = escrow.allowed_amt(now);
 
         if now < escrow.start_time {
-            allowed_amt = escrow.amount;
+            allowed_amt = 0;
         }
         if now >= escrow.end_time {
             msg!("Stream already completed");

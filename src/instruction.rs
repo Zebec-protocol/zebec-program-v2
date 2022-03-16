@@ -6,7 +6,7 @@ use {borsh::{BorshDeserialize}};
 
 use crate::{
     error::TokenError,
-    state::{WhiteList,Multisig,EscrowMultisig,TokenEscrowMultisig,SolTransfer,TokenTransfer}
+    state::{Multisig,EscrowMultisig,TokenEscrowMultisig,SolTransfer,TokenTransfer}
 };
 use std::convert::TryInto;
 
