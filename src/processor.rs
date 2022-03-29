@@ -126,6 +126,7 @@ impl Processor {
         escrow.amount = amount;
         escrow.withdrawn = 0 ;
         escrow.paused_at = 0;
+        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -464,6 +465,12 @@ impl Processor {
             return Err(TokenError::AlreadyResumed.into());
         }
         let time_spent = now - escrow.paused_at;
+        let paused_start_time = escrow.start_time + time_spent;
+        let paused_amount = escrow.allowed_amt(paused_start_time);
+        let current_amount = escrow.allowed_amt(now);
+        let total_amount_to_sent = current_amount - paused_amount;
+        msg!("total_amount_to_sent: {},  paused_amount:{}, current_amount:{}",total_amount_to_sent,paused_amount,current_amount);
+        escrow.amount = escrow.amount - total_amount_to_sent;
         escrow.paused = 0;
         escrow.start_time += time_spent;
         escrow.end_time += time_spent;
@@ -1078,7 +1085,6 @@ impl Processor {
         let source_account_info = next_account_info(account_info_iter)?;
         let dest_account_info = next_account_info(account_info_iter)?;
         let pda_data = next_account_info(account_info_iter)?;
-
         if *pda_data.owner != *program_id{
             return Err(ProgramError::InvalidArgument);
         }
@@ -3481,12 +3487,12 @@ impl Processor {
             }) => {
                 msg!("Instruction: Sol Withdraw");
                 let pda_data = &accounts[3];// Program pda to store data
+                msg!("{}",pda_data.data_len());
                 if pda_data.data_len() != 120 {
                     Self::process_sol_withdraw_stream_deprecated(program_id,accounts,amount)
                 }
                 else{
                     Self::process_sol_withdraw_stream(program_id,accounts, amount)
-
                 }
             }
             TokenInstruction::ProcessCancelSolStream => {
@@ -3514,6 +3520,7 @@ impl Processor {
             }) => {
                 msg!("Instruction: Token Withdraw");
                 let pda_data = &accounts[3];// Program pda to store data
+                msg!("{}",pda_data.data_len());
                 if pda_data.data_len() != 152 {
                     Self::process_token_withdraw_stream_deprecated(program_id,accounts,amount)
                 }

@@ -105,7 +105,8 @@ pub struct TokenWithdraw{
 pub struct Multisig {
     pub signers: Vec<WhiteList>,
     pub m: u8,
-    pub multisig_safe: Pubkey
+    pub multisig_safe: Pubkey,
+    pub withdrawal: u64
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
