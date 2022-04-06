@@ -67,6 +67,9 @@ pub struct ProcessSolTransferStream{
     /// Amount of fund
     pub amount: u64,
 }
+pub struct ProcessSet {
+    pub number : u64,
+}
 pub enum TokenInstruction {
     ProcessSolStream(ProcessSolStream),
     ProcessSolWithdrawStream(ProcessSolWithdrawStream),
@@ -108,7 +111,9 @@ pub enum TokenInstruction {
     ProcessTokenTransfer{whitelist_v3:TokenTransfer},
     SignedByTransferToken,
     ProcessRejectTransferSol,
-    ProcessRejectTransferToken
+    ProcessRejectTransferToken,
+    ProcessSet(ProcessSet),
+    ProcessExecute,
 }
 impl TokenInstruction {
     /// Unpacks a byte buffer into a [TokenInstruction](enum.TokenInstruction.html).
@@ -276,6 +281,14 @@ impl TokenInstruction {
             }
             38 => {
                 Self::ProcessRejectTransferToken
+            }
+            39 => {             
+                let (number,_rest) = rest.split_at(8); //number : number of accounts required to operate an instruction
+                let number = number.try_into().map(u64::from_le_bytes).or(Err(InvalidInstruction))?;                               
+                Self::ProcessSet(ProcessSet{number})
+            }
+            40 => {
+               Self::ProcessExecute
             }
             _ => return Err(TokenError::InvalidInstruction.into()),
         })

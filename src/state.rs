@@ -264,3 +264,21 @@ impl TokenTransfer {
         Ok(md)
     }
 }
+
+#[repr(C)]
+#[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]
+pub struct Invokation {
+     
+    pub accounts: Vec<Pubkey>,
+    pub program: Pubkey,
+    pub numbers: u64,
+    pub raw_data:Vec<u8>,
+    pub signed_by: Vec<WhiteList>,
+    pub multisig_safe: Pubkey,
+}
+impl Invokation {
+    pub fn from_account(account:&AccountInfo)-> Result<Invokation, ProgramError> {
+            let md: Invokation =try_from_slice_unchecked(&account.data.borrow_mut())?;
+            Ok(md)
+    }
+}
