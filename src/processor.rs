@@ -74,10 +74,10 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        if now > end_time{
+        if now >= end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        if start_time > end_time {
+        if start_time >= end_time {
             return Err(TokenError::InvalidInstruction.into());
         }
         assert_keys_equal(system_program::id(), *system_program.key)?;
@@ -131,7 +131,6 @@ impl Processor {
         escrow.amount = amount;
         escrow.withdrawn = 0 ;
         escrow.paused_at = 0;
-        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -265,6 +264,7 @@ impl Processor {
         }
         // Recipient can only withdraw the money that is already streamed. 
         let mut allowed_amt = escrow.allowed_amt(now);
+        msg!("{}",allowed_amt);
         if now >= escrow.end_time {
             allowed_amt = escrow.amount;
         }
@@ -506,10 +506,10 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        if now > end_time{
+        if now >= end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        if start_time > end_time {
+        if start_time >= end_time {
             return Err(TokenError::InvalidInstruction.into());
         }
         let space_size = std::mem::size_of::<StreamToken>();
@@ -1547,10 +1547,10 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        if now > data.end_time{
+        if now >= data.end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        if data.start_time > data.end_time {
+        if data.start_time >= data.end_time {
             return Err(TokenError::InvalidInstruction.into());
         }
         assert_keys_equal(system_program::id(), *system_program.key)?;
@@ -2478,10 +2478,10 @@ impl Processor {
         }
         // current time in unix time
         let now = Clock::get()?.unix_timestamp as u64; 
-        if now > data.end_time{
+        if now >= data.end_time{
             return Err(TokenError::TimeEnd.into());
         }
-        if data.start_time > data.end_time {
+        if data.start_time >= data.end_time {
             return Err(TokenError::InvalidInstruction.into());
         }
         if !pda_data.data_is_empty(){
