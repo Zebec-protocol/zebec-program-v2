@@ -10,9 +10,6 @@ use solana_program::{
     sysvar::{rent::Rent,clock::Clock,Sysvar},
     msg,
     system_program,
-    instruction::AccountMeta,
-    system_instruction,
-    instruction
 };
 use num_traits::FromPrimitive;
 use crate::{
@@ -32,10 +29,9 @@ use crate::{
         ProcessSwapToken,
         ProcessSolWithdrawStreamMultisig,
         ProcessTokenWithdrawStreamMultisig,
-        ProcessSet
     },
-    state::{Stream,StreamToken,StreamMultisig,TokenStreamMultisig,Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,TokenEscrowMultisig,EscrowMultisig,SolTransfer,TokenTransfer,Invokation},
-    error::{TokenError,TokenError::InvalidInstruction},
+    state::{Stream,StreamToken,StreamMultisig,TokenStreamMultisig,Escrow,TokenEscrow,Withdraw,TokenWithdraw,Multisig,WhiteList,TokenEscrowMultisig,EscrowMultisig,SolTransfer,TokenTransfer},
+    error::{TokenError},
 
     utils::{
         assert_keys_equal,
@@ -270,9 +266,9 @@ impl Processor {
         }
         allowed_amt -=  escrow.withdrawn;
         msg!("You can withdraw {}",allowed_amt);
-        if !dest_account_info.is_signer {
-            return Err(ProgramError::MissingRequiredSignature); 
-        }
+        // if !dest_account_info.is_signer {
+        //     return Err(ProgramError::MissingRequiredSignature); 
+        // }
         msg!("{:?}",escrow);
         if *dest_account_info.key != escrow.recipient {
             return Err(TokenError::EscrowMismatch.into());
@@ -429,8 +425,11 @@ impl Processor {
         if now >= escrow.end_time {
             return Err(TokenError::TimeEnd.into());
         }
-        if now < escrow.start_time{
+        if now <= escrow.start_time{
             return Err(TokenError::StreamNotStarted.into());
+        }
+        if escrow.start_time >= escrow.end_time {
+            return Err(TokenError::InvalidInstruction.into());
         }
         // Both sender and receiver can pause / resume stream
         if !source_account_info.is_signer && !dest_account_info.is_signer{ 
@@ -446,6 +445,7 @@ impl Processor {
         escrow.paused = 1;
         escrow.withdraw_limit = allowed_amt;
         escrow.paused_at = now;
+        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -476,11 +476,10 @@ impl Processor {
         let current_amount = escrow.allowed_amt(now);
         let total_amount_to_sent = current_amount - paused_amount;
         msg!("total_amount_to_sent: {},  paused_amount:{}, current_amount:{}",total_amount_to_sent,paused_amount,current_amount);
-        escrow.amount = escrow.amount - total_amount_to_sent;
+        escrow.withdrawn = escrow.withdrawn + total_amount_to_sent;
         escrow.paused = 0;
-        escrow.start_time += time_spent;
-        escrow.end_time += time_spent;
         escrow.paused_at = 0;
+        msg!("{:?}",escrow);
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -1072,7 +1071,7 @@ impl Processor {
         let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
         withdraw_state.amount -= escrow.amount;
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
-        // We don't need to send tkens to sender wallet since tokens are already stored in master pda associated token account
+        // We don't need to send tokens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
         let dest_starting_lamports = source_account_info.lamports();
         **source_account_info.lamports.borrow_mut() = dest_starting_lamports
@@ -1109,7 +1108,9 @@ impl Processor {
         if !source_account_info.is_signer && !dest_account_info.is_signer{ // Both sender and receiver can pause / resume stream
             return Err(ProgramError::MissingRequiredSignature); 
         }
-
+        if escrow.start_time >= escrow.end_time {
+            return Err(TokenError::InvalidInstruction.into());
+        }
         if *source_account_info.key != escrow.sender || *dest_account_info.key != escrow.recipient { //Sender and Recipient both can pause or resume any transaction
             return Err(TokenError::EscrowMismatch.into());
         }
@@ -1196,7 +1197,6 @@ impl Processor {
         let pda_associated_info = next_account_info(account_info_iter)?; // Associated token of pda
         let system_program = next_account_info(account_info_iter)?;
         let associated_token_info = next_account_info(account_info_iter)?; // Associated token master {ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL}
-
         let (account_address, _bump_seed) = get_master_address_and_bump_seed(
             source_account_info.key,
             program_id,
@@ -1226,6 +1226,7 @@ impl Processor {
                 ]
             )?
         }
+        msg!("1");
         invoke(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -1243,6 +1244,7 @@ impl Processor {
                 system_program.clone()
             ],
         )?;
+        msg!("2");
         Ok(())
     }
     /// Function to fund ongoing solana streaming
@@ -1484,10 +1486,10 @@ impl Processor {
         let pda_data = next_account_info(account_info)?;
         let system_program = next_account_info(account_info)?;
         let withdraw_data = next_account_info(account_info)?; // pda data storage
-
+        msg!("test");
         let rent = Rent::get()?; 
 
-        let transfer_amount = rent.minimum_balance(std::mem::size_of::<Multisig>()+355);
+        let transfer_amount = rent.minimum_balance(std::mem::size_of::<Multisig>()+355+3*std::mem::size_of::<u64>());
         let (multisig_safe, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
             pda_data.key,
@@ -1521,12 +1523,15 @@ impl Processor {
             system_program,
             pda_data,
         )?;
+        let now = Clock::get()?.unix_timestamp as u64;
         msg!("Creating Escrow for multisig");
         msg!("Escrow Created - {}",multisig_safe);
         let mut save_owners = Multisig::from_account(pda_data)?;
         save_owners.signers = signers.signers;
         save_owners.m = signers.m;
         save_owners.multisig_safe = multisig_safe;
+        save_owners.withdrawal = Some(60 as u64);
+        save_owners.next_withdraw_date = Some(now as u64);
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
@@ -3476,190 +3481,6 @@ impl Processor {
         multisig_check.serialize(&mut &mut pda_data_multisig.data.borrow_mut()[..])?;
         Ok(())
     }
-    pub fn process_set(program_id: &Pubkey,accounts: &[AccountInfo],number:u64,input:&[u8]) -> ProgramResult 
-    {
-        //executed once
-        let account_info_iter = &mut accounts.iter();
-        let initializer= next_account_info(account_info_iter)?;
-        let pda_data =next_account_info(account_info_iter)?; //account to save data 
-        let system_program =next_account_info(account_info_iter)?; 
-        let program =next_account_info(account_info_iter)?; //program to be innvoked key
-        let pda_data_multisig = next_account_info(account_info_iter)?; //multisig pda data
-
-        if !initializer.is_signer
-        {
-            return Err(ProgramError::MissingRequiredSignature);
-
-        } 
-        let (&_tag, rest) = input.split_first().ok_or(InvalidInstruction)?;
-        let data =rest.get(8..).ok_or(InvalidInstruction)?;
-        let x=rest.len();
-        msg!("Extracted number:{}",number);
-        let rent = Rent::get()?;
-        let size: u64=std::mem::size_of::<Invokation>() as u64 + number*(std::mem::size_of::<Pubkey>()) as u64+ x as u64;
-        let transfer_amount =  rent.minimum_balance (size as usize);
-        invoke(
-            &system_instruction::create_account(
-                initializer.key,
-                pda_data.key,
-                transfer_amount,
-                size,
-                program_id,
-            ),
-            &[
-                initializer.clone(),
-                pda_data.clone(),
-                system_program.clone(),
-            ],
-        )?;
-        let mut pda_start = Invokation::from_account(pda_data)?;
-        for _ in 0..number as usize
-        {
-            let account_used = next_account_info(account_info_iter)?;
-            pda_start.accounts.push(*account_used.key);
-        }
-        msg!("Accounts send {:?}",pda_start.accounts);
-        let mut offset=0;
-        while data[offset..].len()>0{
-            let inputing = data
-                .get(offset..offset + 1)
-                .and_then(|slice| slice.try_into().ok())
-                .map(u8::from_le_bytes)
-                .ok_or(InvalidInstruction)?;
-                offset+=1;
-                msg!("Sent Data is {}",inputing);
-            pda_start.raw_data.push(inputing);
-        }
-        let multisig_check = Multisig::from_account(pda_data_multisig)?;
-        let mut k = 0; 
-        for i in 0..multisig_check.signers.len(){
-            if multisig_check.signers[i].address != *initializer.key {
-                k += 1;
-            }
-        }
-        if k == multisig_check.signers.len(){
-            return Err(ProgramError::MissingRequiredSignature); 
-        }
-        let signed_by = WhiteList {
-            address: *initializer.key,
-            counter:0
-        };
-        msg!("Extracted Input");
-        pda_start.program=*program.key;
-        msg!("Program Id IS written");
-        pda_start.numbers=number;
-        msg!("Number is stored:{}",number);
-        pda_start.signed_by.push(signed_by);
-        pda_start.multisig_safe = multisig_check.multisig_safe;
-        pda_start.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
-        msg!("Data writing complete");
-        Ok(())
-    }
-
-    pub fn process_execute(program_id: &Pubkey,accounts: &[AccountInfo],input:&[u8])->ProgramResult
-    {  
-        let account_info_iter = &mut accounts.iter();
-        let pda_data =next_account_info(account_info_iter)?;
-        let program = next_account_info(account_info_iter)?;
-        let initializer = next_account_info(account_info_iter)?;
-        let pda_data_multisig = next_account_info(account_info_iter)?; // pda multisig data storage
-
-        if !initializer.is_signer
-        {
-            return Err(ProgramError::MissingRequiredSignature);
-        } 
-        let multisig_check = Multisig::from_account(pda_data_multisig)?;
-        let mut k = 0; 
-        for i in 0..multisig_check.signers.len(){
-            if multisig_check.signers[i].address != *initializer.key{
-                k += 1;
-            }
-        }
-        if k == multisig_check.signers.len(){
-            return Err(ProgramError::MissingRequiredSignature); 
-        }
-
-        msg!("The program id is :{}",*program_id);
-        if *pda_data.owner != *program_id
-        {
-            msg!("The pda isn't owned by program id");
-            return Err(ProgramError::MissingRequiredSignature);
-        } 
-        msg!("Reading Account Data {:?}......",pda_data.data);
-        let  mut pda_start = Invokation::from_account(pda_data)?;
-        let signed_by = WhiteList {
-            address: *initializer.key,
-            counter:0
-        };
-        let mut n = 0;
-        for i in 0..pda_start.signed_by.len(){
-            if pda_start.signed_by[i].address == signed_by.address {
-                n += 1;
-            }
-        }
-        if n > 0{
-            return Err(TokenError::PublicKeyMismatch.into()); 
-        }
-        pda_start.signed_by.push(signed_by);
-        if  pda_start.signed_by.len() >= multisig_check.m.into() {
-            let mut metas: Vec<AccountMeta> = Vec::with_capacity(std::mem::size_of::<AccountMeta>()*(pda_start.numbers as usize));
-
-            for i in 0..(pda_start.numbers as usize)
-            {
-                let account_used = next_account_info(account_info_iter)?;
-                if account_used.is_writable == true {
-                let tmp_meta: AccountMeta=AccountMeta::new(*account_used.key, account_used.is_signer);
-                metas.push(tmp_meta);
-                } else {
-                let tmp_meta: AccountMeta=AccountMeta::new_readonly(*account_used.key, account_used.is_signer);
-                metas.push(tmp_meta);
-                }
-                if *account_used.key != pda_start.accounts[i]
-                {
-                    return Err(ProgramError::MissingRequiredSignature); 
-                }
-                msg!("keys sent:{}", *account_used.key );
-                msg!("keys in state :{}",pda_start.accounts[i]);
-            }   
-            if *program.key != pda_start.program   
-            {
-                msg!("The program id don't mathc ");
-                return Err(ProgramError::MissingRequiredSignature); 
-            }   
-        
-            msg!("Account Metas include: {}",metas.len());
-            let (&_tag, rest) = input.split_first().ok_or(InvalidInstruction)?;
-            let mut i:usize=0;
-            let mut offset=0;
-            while rest[offset..].len()>0{
-                let inputing = rest
-                    .get(offset..offset + 1)
-                    .and_then(|slice| slice.try_into().ok())
-                    .map(u8::from_le_bytes)
-                    .ok_or(InvalidInstruction)?;
-                    offset+=1;
-                    msg!("Sent Data is {}",inputing);       
-                if inputing!=pda_start.raw_data[i]
-                {
-                msg!("Instruction mismatch at position {}",i);
-                msg!("Saved Instruction {}",pda_start.raw_data[i]);
-                msg!("Saved Instruction {}",inputing);     
-                return Err(ProgramError::MissingRequiredSignature); 
-                }
-                i=i+1;
-            }
-            let instruction=instruction::Instruction::new_with_bytes(*program.key,rest,metas);
-            msg!("The content of rest is {:?}",rest);
-            //cpi is 
-            invoke(
-            &instruction, 
-            accounts,)?;
-            
-            msg!("Successfully implemented CPI");
-            pda_start.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;    
-        }
-        Ok(())
-    }
     
     /// Processes an [Instruction](enum.Instruction.html).
     pub fn process(program_id: &Pubkey, accounts: &[AccountInfo], input: &[u8]) -> ProgramResult {
@@ -3876,14 +3697,6 @@ impl Processor {
             TokenInstruction::ProcessRejectTransferToken => {
                 msg!("Instruction: Rejecting token transfer multisig");
                 Self::process_transfer_token_reject_multisig(program_id,accounts) 
-            }
-            TokenInstruction::ProcessSet(ProcessSet{number}) => {
-                msg!("Instruction: Settings");
-                Self::process_set(program_id, accounts,number,input)
-            }
-            TokenInstruction::ProcessExecute => {
-                msg!("Instruction: Executing");
-                Self::process_execute(program_id, accounts,input)
             }
         }
     }
