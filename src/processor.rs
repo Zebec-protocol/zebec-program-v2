@@ -395,7 +395,7 @@ impl Processor {
             pda_signer_seeds
         )?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= escrow.amount;
+        withdraw_state.amount -= escrow.amount.checked_sub(escrow.withdrawn).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
         // Closing account to send rent to sender
@@ -1069,7 +1069,7 @@ impl Processor {
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
         let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= escrow.amount;
+        withdraw_state.amount -= escrow.amount.checked_sub(escrow.withdrawn).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send tokens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
@@ -2330,9 +2330,9 @@ impl Processor {
         if now < escrow.start_time {
             allowed_amt = 0;
         }
-        // if *source_account_info.key != escrow.sender {
-        //     return Err(TokenError::OwnerMismatch.into());
-        // }
+        if *source_account_info.key != escrow.sender {
+            return Err(TokenError::OwnerMismatch.into());
+        }
         msg!("escrow.multisig_safe: {} *pda.key: {}",escrow.multisig_safe,*pda.key);
 
         if escrow.multisig_safe != *pda.key {
@@ -2366,7 +2366,7 @@ impl Processor {
             pda_signer_seeds
         )?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= escrow.amount;
+        withdraw_state.amount -= escrow.amount.checked_sub(escrow.withdrawn).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send remaining funds to sender, its already in sender master pda account which he can withdraw with withdraw function
         // Closing account to send rent to sender
@@ -3175,7 +3175,7 @@ impl Processor {
         );
         assert_keys_equal(*withdraw_data.key,account_address )?;
         let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= escrow.amount;
+        withdraw_state.amount -= escrow.amount.checked_sub(escrow.withdrawn).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         // We don't need to send tkens to sender wallet since tokens are already stored in master pda associated token account
         // Sending pda rent to sender account
