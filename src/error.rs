@@ -29,7 +29,7 @@ pub enum TokenError {
     /// Operation overflowed
     #[error("Operation overflowed")]
     Overflow,
-    // Publck Key Check error
+    // Public Key Check error
     #[error("Public key mismatched")]
     PublicKeyMismatch,
     // Already Paused

@@ -17,9 +17,9 @@ pub const PREFIX_TOKEN: &str = "withdraw_token";
 pub const PREFIXMULTISIG: &str = "withdraw_multisig_sol";
 pub const PREFIXMULTISIGSAFE: &str = "multisig_safe";
 
-/// Minimum number of multisignature signers (min N)
+/// Minimum number of multi-signature signers (min N)
 pub const MIN_SIGNERS: usize = 1;
-/// Maximum number of multisignature signers (max N)
+/// Maximum number of multi-signature signers (max N)
 pub const MAX_SIGNERS: usize = 11;
 
 entrypoint!(process_instruction);

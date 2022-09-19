@@ -106,9 +106,6 @@ pub struct Multisig {
     pub signers: Vec<WhiteList>,
     pub m: u8,
     pub multisig_safe: Pubkey,
-    pub withdrawal: Option<u64>,
-    pub next_withdraw_date: Option<u64>,
-    pub withdrawn: Option<u64>
 }
 #[repr(C)]
 #[derive(BorshSerialize, BorshDeserialize, PartialEq, Debug, Clone)]

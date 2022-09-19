@@ -55,7 +55,7 @@ use std::str::FromStr;
 /// Program state handler.
 pub struct Processor {}
 impl Processor {
-    /// Function to initilize a solana
+    /// Function to initialize a solana
     pub fn process_sol_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
@@ -321,7 +321,8 @@ impl Processor {
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= amount;
+        withdraw_state.amount = withdraw_state.amount.checked_sub(amount).unwrap();
+        msg!("{:?}",withdraw_state);
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -377,6 +378,7 @@ impl Processor {
             &source_account_info.key.to_bytes(),
             &[bump_seed],
         ];
+        allowed_amt = allowed_amt.checked_sub(escrow.withdrawn).unwrap();
         let comission: u64 = 25*allowed_amt/10000; 
         let receiver_amount:u64=allowed_amt-comission;
         create_transfer(
@@ -483,7 +485,7 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    // Function to initilize token streaming 
+    // Function to initialize token streaming 
     fn process_token_stream(program_id: &Pubkey, accounts: &[AccountInfo], start_time: u64, end_time: u64, amount: u64) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
@@ -785,6 +787,7 @@ impl Processor {
         let mut escrow = StreamToken::try_from_slice(&pda_data.data.borrow())?;
         assert_keys_equal(escrow.token_mint, *token_mint_info.key)?;
         let now = Clock::get()?.unix_timestamp as u64;
+        msg!("current time: {:?}",now);
         if now <= escrow.start_time {
             msg!("Stream has not been started");
             return Err(TokenError::StreamNotStarted.into());
@@ -917,7 +920,9 @@ impl Processor {
         assert_keys_equal(*withdraw_data.key,account_address )?;
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= amount;
+        msg!("{:?}",withdraw_state);
+        withdraw_state.amount = withdraw_state.amount.checked_sub(amount).unwrap();
+        msg!("{:?}",withdraw_state);
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -1025,6 +1030,8 @@ impl Processor {
                 ]
             )?
         }
+        allowed_amt = allowed_amt.checked_sub(escrow.withdrawn).unwrap();
+        msg!("{:?}",allowed_amt);
         let comission: u64 = 25*allowed_amt/10000; 
         let receiver_amount:u64=allowed_amt-comission;
         invoke_signed(
@@ -1486,9 +1493,8 @@ impl Processor {
         let pda_data = next_account_info(account_info)?;
         let system_program = next_account_info(account_info)?;
         let withdraw_data = next_account_info(account_info)?; // pda data storage
-        msg!("test");
+        
         let rent = Rent::get()?; 
-
         let transfer_amount = rent.minimum_balance(std::mem::size_of::<Multisig>()+355+3*std::mem::size_of::<u64>());
         let (multisig_safe, _bump_seed_multisig) = get_multisig_data_and_bump_seed(
             PREFIXMULTISIGSAFE,
@@ -1523,19 +1529,16 @@ impl Processor {
             system_program,
             pda_data,
         )?;
-        let now = Clock::get()?.unix_timestamp as u64;
         msg!("Creating Escrow for multisig");
         msg!("Escrow Created - {}",multisig_safe);
         let mut save_owners = Multisig::from_account(pda_data)?;
         save_owners.signers = signers.signers;
         save_owners.m = signers.m;
         save_owners.multisig_safe = multisig_safe;
-        save_owners.withdrawal = Some(60 as u64);
-        save_owners.next_withdraw_date = Some(now as u64);
         save_owners.serialize(&mut *pda_data.data.borrow_mut())?;
         Ok(())
     }
-    /// Function to initilize a solana
+    /// Function to initialize a solana
     pub fn process_sol_stream_multisig(program_id: &Pubkey, accounts: &[AccountInfo], data: EscrowMultisig) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  //sender
@@ -1913,7 +1916,7 @@ impl Processor {
         Ok(())
     }
     /// Function to deposit solana
-    fn process_trasfer_sol_multisig(program_id: &Pubkey,accounts: &[AccountInfo],data: SolTransfer,) -> ProgramResult {
+    fn process_transfer_sol_multisig(program_id: &Pubkey,accounts: &[AccountInfo],data: SolTransfer,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?; // sender
         let dest_account_info = next_account_info(account_info_iter)?; // reciver
@@ -2260,7 +2263,7 @@ impl Processor {
             msg!("{}{}",escrow.withdraw_limit,amount);
             escrow.withdraw_limit -= amount;
         }
-        escrow.withdrawn += amount;
+        escrow.withdrawn  = escrow.withdrawn.checked_add(amount).unwrap();
         // Closing account to send rent to sender
         if escrow.withdrawn == escrow.amount { 
             let dest_starting_lamports = source_account_info.lamports();
@@ -2271,7 +2274,7 @@ impl Processor {
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         let mut withdraw_state = Withdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= amount;
+        withdraw_state.amount = withdraw_state.amount.checked_sub(amount).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -2321,6 +2324,7 @@ impl Processor {
             return Err(ProgramError::MissingRequiredSignature); 
         }
         let now = Clock::get()?.unix_timestamp as u64;
+        msg!("Current time: {}", now);
         // Amount that recipient should receive.  
         let mut allowed_amt = escrow.allowed_amt(now);
         if now >= escrow.end_time {
@@ -2348,6 +2352,7 @@ impl Processor {
             &multisig_pda_data.key.to_bytes(),
             &[bump_seed_multisig],
         ];
+        allowed_amt = allowed_amt.checked_sub(escrow.withdrawn).unwrap();
         let comission: u64 = 25*allowed_amt/10000; 
         let receiver_amount:u64=allowed_amt-comission;
         create_transfer(
@@ -2462,7 +2467,7 @@ impl Processor {
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         Ok(())
     }
-    // Function to initilize token streaming 
+    // Function to initialize token streaming 
     fn process_token_multisig_stream(program_id: &Pubkey, accounts: &[AccountInfo],data: TokenEscrowMultisig) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?;  // sender 
@@ -2872,6 +2877,7 @@ impl Processor {
         let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
         assert_keys_equal(escrow.token_mint, *token_mint_info.key)?;
         let now = Clock::get()?.unix_timestamp as u64;
+        msg!("current time: {}",now);
         if now <= escrow.start_time {
             msg!("Stream has not been started");
             return Err(TokenError::StreamNotStarted.into());
@@ -2997,7 +3003,10 @@ impl Processor {
             msg!("{}{}",escrow.withdraw_limit,amount);
             escrow.withdraw_limit -= amount;
         }
-        escrow.withdrawn += amount;
+        msg!("amount: {}",amount);
+        escrow.withdrawn = escrow.withdrawn.checked_add(amount).unwrap();
+        msg!("amount: {}",escrow.withdrawn);
+
         // Closing account to send rent to sender
         if escrow.withdrawn == escrow.amount { 
             let dest_starting_lamports = source_account_info.lamports();
@@ -3008,7 +3017,7 @@ impl Processor {
         }
         escrow.serialize(&mut &mut pda_data.data.borrow_mut()[..])?;
         let mut withdraw_state = TokenWithdraw::try_from_slice(&withdraw_data.data.borrow())?;
-        withdraw_state.amount -= amount;
+        withdraw_state.amount = withdraw_state.amount.checked_sub(amount).unwrap();
         withdraw_state.serialize(&mut &mut withdraw_data.data.borrow_mut()[..])?;
         Ok(())
     }
@@ -3056,6 +3065,8 @@ impl Processor {
         }
         let mut escrow = TokenStreamMultisig::from_account(pda_data)?;
         let now = Clock::get()?.unix_timestamp as u64;
+        msg!("current time: {}",now);
+
         if escrow.can_cancel == false {
             return Err(TokenError::CancelNotAllowed.into());
         }
@@ -3064,7 +3075,7 @@ impl Processor {
         }
         // Amount that recipient should receive.  
         let mut allowed_amt = escrow.allowed_amt(now);
-
+        msg!("allowed_amt: {}",allowed_amt);
         if now < escrow.start_time {
             allowed_amt = 0;
         }
@@ -3131,8 +3142,13 @@ impl Processor {
                 ]
             )?
         }
+        allowed_amt = allowed_amt.checked_sub(escrow.withdrawn).unwrap();
+        msg!("withdrawn: {}",escrow.withdrawn);
+        msg!("subtracting withdrawn: {}",allowed_amt);
         let comission: u64 = 25*allowed_amt/10000; 
+        msg!("comission: {}",comission);
         let receiver_amount:u64=allowed_amt-comission;
+        msg!("receiver_amount: {}",receiver_amount);
         invoke_signed(
             &spl_token::instruction::transfer(
                 token_program_info.key,
@@ -3288,7 +3304,7 @@ impl Processor {
         Ok(())
     }
     /// Function to deposit solana
-    fn process_trasfer_token_multisig(program_id: &Pubkey,accounts: &[AccountInfo],data: TokenTransfer,) -> ProgramResult {
+    fn process_transfer_token_multisig(program_id: &Pubkey,accounts: &[AccountInfo],data: TokenTransfer,) -> ProgramResult {
         let account_info_iter = &mut accounts.iter();
         let source_account_info = next_account_info(account_info_iter)?; // sender
         let dest_account_info = next_account_info(account_info_iter)?; // reciver
@@ -3560,7 +3576,7 @@ impl Processor {
             TokenInstruction::ProcessDepositToken(ProcessDepositToken {
                 amount,
             }) => {
-                msg!("Instruction: Deposite token");
+                msg!("Instruction: Deposit token");
                 Self::process_deposit_token(program_id,accounts,amount) 
             }
             TokenInstruction::ProcessFundSol(ProcessFundSol {
@@ -3606,7 +3622,7 @@ impl Processor {
                 Self::process_swap_token(program_id,accounts,amount) 
             }
             TokenInstruction::SignedBy => {
-                msg!("Instruction: Signning multisig");
+                msg!("Instruction: Signing multisig");
                 Self::process_sign_stream(program_id,accounts) 
             }
             TokenInstruction::ProcessSolMultiSigStream{whitelist_v3} => {
@@ -3616,7 +3632,8 @@ impl Processor {
             TokenInstruction::ProcessSolWithdrawStreamMultisig (ProcessSolWithdrawStreamMultisig{
                 amount}) =>{
                     let pda_data = &accounts[3];// Program pda to store data
-                    if pda_data.data_len() != 531 {
+                    msg!("pda_data: {}",pda_data.data_len());
+                    if pda_data.data_len() != 539 {
                         Self::process_sol_withdraw_stream_multisig_deprecated(program_id,accounts,amount)
                     }
                     else {
@@ -3647,7 +3664,8 @@ impl Processor {
                 amount}) =>{
                     msg!("Instruction: Withdraw Token MultiSig");
                     let pda_data = &accounts[4];// Program pda to store data
-                    if pda_data.data_len() != 808 {
+                    msg!("pda_data: {}",pda_data.data_len());
+                    if pda_data.data_len() != 571 {
                         Self::process_token_withdraw_multisig_stream_deprecated(program_id,accounts,amount)
                     }
                     else {
@@ -3671,23 +3689,23 @@ impl Processor {
                 Self::process_reject_token_stream_multisig(accounts)
             }
             TokenInstruction::SignedByToken => {
-                msg!("Instruction: Signning token multisig");
+                msg!("Instruction: Signing token multisig");
                 Self::process_sign_token_stream(program_id,accounts) 
             }
             TokenInstruction::ProcessSolTransfer{whitelist_v3} => {
                 msg!("Instruction: Initiating Sol transfer multisig");
-                Self::process_trasfer_sol_multisig(program_id,accounts,whitelist_v3) 
+                Self::process_transfer_sol_multisig(program_id,accounts,whitelist_v3) 
             }
             TokenInstruction::SignedByTransferSol => {
-                msg!("Instruction: Signning Sol transfer multisig");
+                msg!("Instruction: Signing Sol transfer multisig");
                 Self::process_transfer_sol_sign_multisig(program_id,accounts) 
             }
             TokenInstruction::ProcessTokenTransfer{whitelist_v3} => {
                 msg!("Instruction: Initiating token transfer multisig");
-                Self::process_trasfer_token_multisig(program_id,accounts,whitelist_v3) 
+                Self::process_transfer_token_multisig(program_id,accounts,whitelist_v3) 
             }
             TokenInstruction::SignedByTransferToken => {
-                msg!("Instruction: Signning token transfer multisig");
+                msg!("Instruction: Signing token transfer multisig");
                 Self::process_transfer_token_sign_multisig(program_id,accounts) 
             }
             TokenInstruction::ProcessRejectTransferSol => {
