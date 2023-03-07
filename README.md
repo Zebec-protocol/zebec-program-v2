@@ -1,3 +1,5 @@
+# DEPRECATED ⛔️
+
 ### Configure CLI
 If you're on Windows, it is recommended to use WSL to run these commands
 
